@@ -1,0 +1,47 @@
+export const theme = {
+  colors: {
+    primary: '#5dd4bf', // Light mode primary
+    primaryForeground: '#2f4946',
+    background: '#fcfcfc',
+    foreground: '#2b2b30',
+    card: '#fcfcfc',
+    cardForeground: '#2b2b30',
+    muted: '#efefef',
+    mutedForeground: '#333337',
+    border: '#e3e3e5',
+    input: '#f7f7f8',
+    destructive: '#d14343',
+    destructiveForeground: '#fef9f9',
+    secondary: '#fefefe',
+    secondaryForeground: '#2b2b30',
+  },
+  dark: {
+    primary: '#00a991', // Dark mode primary (OKLCH converted)
+    primaryForeground: '#e0f5f1',
+    background: '#1b1b1f',
+    foreground: '#e5e1e6',
+    card: '#2b2b30',
+    cardForeground: '#e5e1e6',
+    muted: '#323236',
+    mutedForeground: '#b0b0b4',
+    border: '#3d3d41',
+    input: '#363639',
+    destructive: '#6b2c2c',
+    destructiveForeground: '#ede8e9',
+    secondary: '#363639',
+    secondaryForeground: '#fbfbfb',
+  },
+  radius: {
+    sm: 4,
+    md: 8,
+    lg: 12,
+    xl: 16,
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
+  },
+};

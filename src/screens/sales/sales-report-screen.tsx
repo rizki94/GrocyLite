@@ -1,0 +1,126 @@
+import React, { useState, useMemo } from 'react';
+import { View, Text, FlatList, RefreshControl } from 'react-native';
+import { AppLayout } from '../../components/layout/app-layout';
+import { useFetchWithParams } from '../../hooks/use-fetch';
+import { dateFormatted, numberWithComma } from '../../utils/helpers';
+import { Card } from '../../components/ui/card';
+import { useThemeColor } from '../../lib/colors';
+import { useTranslation } from 'react-i18next';
+import { DatePicker } from '../../components/ui/date-picker';
+import { Loading } from '../../components/ui/loading';
+import { Search } from 'lucide-react-native';
+import { Input } from '../../components/ui/input';
+import { useDebounce } from '../../hooks/use-debounce';
+
+export function SalesReportScreen() {
+  const { t } = useTranslation();
+  const colors = useThemeColor();
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 500);
+
+  const filters = {
+    startDate: dateFormatted(startDate),
+    endDate: dateFormatted(endDate),
+    search: debouncedSearch,
+  };
+
+  const { data: omzetData, isLoading } = useFetchWithParams(
+    'api/bridge/omzet_sales',
+    { params: filters },
+    filters,
+  );
+
+  // Transform the object response from api/bridge/omzet_sales into an array
+  const omzet = useMemo(() => {
+    if (!omzetData) return [];
+    // The backend returns an object keyed by salesman name for omzet_sales
+    return Array.isArray(omzetData) ? omzetData : Object.values(omzetData);
+  }, [omzetData]);
+
+  const grandTotal = omzet.reduce(
+    (acc, curr) => acc + (Number(curr.Amount) || 0),
+    0,
+  );
+
+  const renderItem = ({ item }: { item: any }) => (
+    <Card className="mb-3 mx-1 p-4 border-border bg-card shadow-sm">
+      <View className="flex-row justify-between items-center">
+        <View className="flex-1 mr-4">
+          <Text
+            className="font-bold text-base text-foreground"
+            numberOfLines={1}
+          >
+            {item.Salesman || t('general.noData')}
+          </Text>
+        </View>
+        <Text className="font-bold text-primary text-base">
+          {numberWithComma(item.Amount || 0)}
+        </Text>
+      </View>
+    </Card>
+  );
+
+  return (
+    <AppLayout title={t('sales.omzetReport')} showBack>
+      <View className="px-4 mb-6">
+        <View className="flex-row gap-3 mb-4">
+          <View className="flex-1">
+            <DatePicker
+              label={t('general.from')}
+              value={startDate}
+              onChange={setStartDate}
+            />
+          </View>
+          <View className="flex-1">
+            <DatePicker
+              label={t('general.to')}
+              value={endDate}
+              onChange={setEndDate}
+            />
+          </View>
+        </View>
+
+        <Card className="p-5 bg-primary/5 border-primary/20 items-center mb-4">
+          <Text className="text-muted-foreground text-xs uppercase font-bold tracking-wider mb-1">
+            {t('sales.grandTotal')}
+          </Text>
+          <Text className="font-black text-3xl text-primary">
+            {numberWithComma(grandTotal)}
+          </Text>
+        </Card>
+
+        {/* Search Input */}
+        <View className="relative">
+          <View className="absolute left-3 top-2.5 z-10">
+            <Search size={18} color={colors.mutedForeground} />
+          </View>
+          <Input
+            placeholder={t('general.search')}
+            className="pl-10 bg-secondary/50 border-0 h-10"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+      </View>
+
+      <FlatList
+        data={omzet}
+        renderItem={renderItem}
+        keyExtractor={(item, index) => index.toString()}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
+        ListEmptyComponent={
+          !isLoading ? (
+            <Text className="text-center mt-10 text-muted-foreground">
+              {t('general.noData')}
+            </Text>
+          ) : null
+        }
+      />
+      {isLoading && <Loading isLoading={isLoading} />}
+    </AppLayout>
+  );
+}
