@@ -57,7 +57,7 @@ export function ServerConfigurationScreen() {
         <View className="gap-3">
           <Button
             label={t('serverConfig.defaultUrl')}
-            variant="ghost"
+            variant="secondary"
             onPress={() => setValue(defaultUrl)}
           />
           <Button

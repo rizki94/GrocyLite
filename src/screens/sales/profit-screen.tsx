@@ -340,9 +340,7 @@ export function ProfitScreen({ navigation: propNavigation }: any) {
                     <View className="flex-row justify-between items-start mb-3">
                       <View className="flex-1">
                         <Text className="text-base font-bold text-foreground mb-0.5">
-                          {activeTab === 'salesman'
-                            ? item.Salesman || 'Unknown'
-                            : item.RouteName || 'Unknown'}
+                          {item.Salesman || 'Unknown'}
                         </Text>
                         <Text className="text-xs text-muted-foreground">
                           {item.Count || 0} {t('sales.outletsCovered')}

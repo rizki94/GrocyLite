@@ -51,10 +51,6 @@ export function LoginScreen({ navigation }: any) {
       </View>
 
       <Card className="border-0 shadow-none bg-transparent bg">
-        <CardHeader className="px-0">
-          <CardTitle>{t('login.welcome')}</CardTitle>
-          <CardDescription>{t('login.subtitle')}</CardDescription>
-        </CardHeader>
         <CardContent className="gap-2 px-0 space-y-4">
           {error ? (
             <View className="bg-destructive/10 p-3 rounded-md mb-2">

@@ -570,7 +570,7 @@ export function StockOpnameScreen() {
             onPress={() => setShowOptions(!showOptions)}
             className={`p-3 rounded-xl border h-14 w-14 items-center justify-center ${showOptions ? 'bg-primary border-primary' : 'bg-card border-border shadow-sm'}`}
           >
-            <Filter size={22} color={showOptions ? '#fff' : colors.card} />
+            <Filter size={22} color={showOptions ? '#fff' : colors.primary} />
           </TouchableOpacity>
         </View>
 

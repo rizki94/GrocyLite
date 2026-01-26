@@ -1,0 +1,30 @@
+error Cannot find module 'D:\GrocyLite\file:\D:\GrocyLite\metro.config.js'
+Require stack:
+- D:\GrocyLite\node_modules\metro-config\src\loadConfig.js
+- D:\GrocyLite\node_modules\metro-config\src\index.flow.js
+- D:\GrocyLite\node_modules\metro-config\src\index.js
+- D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\utils\loadMetroConfig.js
+- D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\commands\bundle\buildBundle.js
+- D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\commands\bundle\index.js
+- D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\index.js
+- D:\GrocyLite\node_modules\react-native\react-native.config.js.
+Error: Cannot find module 'D:\GrocyLite\file:\D:\GrocyLite\metro.config.js'
+Require stack:
+- D:\GrocyLite\node_modules\metro-config\src\loadConfig.js
+- D:\GrocyLite\node_modules\metro-config\src\index.flow.js
+- D:\GrocyLite\node_modules\metro-config\src\index.js
+- D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\utils\loadMetroConfig.js
+- D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\commands\bundle\buildBundle.js
+- D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\commands\bundle\index.js
+- D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\index.js
+- D:\GrocyLite\node_modules\react-native\react-native.config.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+    at Function.resolve (node:internal/modules/helpers:145:19)
+    at resolve (D:\GrocyLite\node_modules\metro-config\src\loadConfig.js:70:20)
+    at resolveConfig (D:\GrocyLite\node_modules\metro-config\src\loadConfig.js:82:9)
+    at loadMetroConfig (D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\utils\loadMetroConfig.js:77:62)
+    at Object.runServer [as func] (D:\GrocyLite\node_modules\@react-native\community-cli-plugin\dist\commands\start\runServer.js:56:58)
+    at Command.handleAction (D:\GrocyLite\node_modules\@react-native-community\cli\build\index.js:139:23)
+    at Command.listener [as _actionHandler] (D:\GrocyLite\node_modules\commander\lib\command.js:482:17)
+    at D:\GrocyLite\node_modules\commander\lib\command.js:1283:65
+    at Command._chainOrCall (D:\GrocyLite\node_modules\commander\lib\command.js:1177:12)
