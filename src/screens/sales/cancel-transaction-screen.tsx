@@ -14,6 +14,7 @@ import { useFetch, useFetchWithParams } from '../../hooks/use-fetch';
 import { useConnection } from '../../hooks/use-connection';
 import { useTranslation } from 'react-i18next';
 import { numberWithComma, dateFormatted } from '../../utils/helpers';
+import { cn } from '../../lib/utils';
 import { ChevronDown, Search } from 'lucide-react-native';
 import { useThemeColor } from '../../lib/colors';
 import { Input } from '../../components/ui/input';
@@ -97,30 +98,34 @@ export function CancelTransactionScreen() {
     : [];
 
   const renderItem = ({ item }: { item: CancelTransactionItem }) => (
-    <View className="flex-row items-center justify-between p-4 border border-border bg-card">
+    <View className="mb-3 mx-1 flex-row items-center justify-between p-4 rounded-2xl border border-border/60 bg-card shadow-sm">
       <View className="flex-1 mr-4">
-        <Text className="font-bold text-sm text-foreground">{item.NoTr}</Text>
-        <Text className="text-sm text-muted-foreground mb-1">
+        <Text className="font-extrabold text-sm text-foreground mb-1">
+          {item.NoTr}
+        </Text>
+        <Text className="text-xs font-medium text-muted-foreground uppercase mb-1">
           {item.CompanyName}
         </Text>
-        <Text className="text-xs text-foreground font-medium">
+        <Text className="text-sm font-black text-primary">
           {numberWithComma(item.NetAmount)}
         </Text>
       </View>
       <View>
         {item.opened ? (
-          <Text
-            className="font-bold text-green-600"
-            style={{ color: colors.green }}
-          >
-            {t('cancelTransaction.opened')}
-          </Text>
+          <View className="bg-green-100 dark:bg-green-500/20 px-3 py-1.5 rounded-lg border border-green-200 dark:border-green-500/30">
+            <Text
+              className="font-bold text-xs"
+              style={{ color: colors.green }}
+            >
+              {t('cancelTransaction.opened')}
+            </Text>
+          </View>
         ) : (
           <Pressable
-            className="bg-primary/10 px-3 py-2 rounded-lg active:bg-primary/20"
+            className="bg-primary/10 px-4 py-2.5 rounded-xl active:bg-primary/20 border border-primary/20"
             onPress={() => handleOpen(item.NoTr)}
           >
-            <Text className="text-primary font-medium text-xs">
+            <Text className="text-primary font-bold text-xs uppercase tracking-tight">
               {t('cancelTransaction.open')}
             </Text>
           </Pressable>

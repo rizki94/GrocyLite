@@ -10,6 +10,7 @@ import { AppLayout } from '../../components/layout/app-layout';
 import { Card } from '../../components/ui/card';
 import { useFetchWithParams } from '../../hooks/use-fetch';
 import { dateFormatted, numberWithComma } from '../../utils/helpers';
+import { cn } from '../../lib/utils';
 import { Calendar, ChevronDown, ChevronUp, Package } from 'lucide-react-native';
 import moment from 'moment';
 import { useTranslation } from 'react-i18next';
@@ -111,40 +112,50 @@ export function SalesReturnScreen() {
         </View>
 
         {/* Grand Total */}
-        <Card className="mb-6 p-4 bg-primary">
-          <Text className="text-primary-foreground text-sm font-medium opacity-90">
+        <View className="mb-6 p-5 bg-primary rounded-2xl shadow-lg border border-primary/20">
+          <Text className="text-primary-foreground text-xs font-bold uppercase tracking-wider opacity-80 mb-1">
             {t('element.grandTotal')}
           </Text>
-          <Text className="text-3xl font-bold text-primary-foreground mt-1">
+          <Text className="text-4xl font-black text-white mt-1">
             {numberWithComma(grandTotal)}
           </Text>
-        </Card>
+        </View>
 
         {/* List */}
         <View className="mb-8">
           {groupedData.map((group, index) => (
-            <Card
+            <View
               key={index}
-              className="mb-3 overflow-hidden border border-border"
+              className={cn(
+                'mb-4 overflow-hidden rounded-2xl border bg-card',
+                expandedCompanies[group.CompanyName]
+                  ? 'border-primary/40'
+                  : 'border-border/60',
+              )}
             >
               <Pressable
-                className="p-4 flex-row items-center justify-between bg-card active:bg-secondary/50"
+                className={cn(
+                  'p-4 flex-row items-center justify-between transition-all',
+                  expandedCompanies[group.CompanyName]
+                    ? 'bg-secondary/10'
+                    : 'bg-card',
+                )}
                 onPress={() => toggleExpand(group.CompanyName)}
               >
-                <View className="flex-1">
-                  <Text className="font-bold text-foreground text-foreground">
+                <View className="flex-1 mr-4">
+                  <Text className="font-extrabold text-base text-foreground mb-1">
                     {group.CompanyName}
                   </Text>
-                  <Text className="text-muted-foreground text-xs mt-1">
+                  <Text className="text-muted-foreground text-xs font-bold uppercase tracking-wider">
                     {group.Items.length} {t('element.items')}
                   </Text>
                 </View>
-                <View className="flex-row items-center gap-3">
-                  <Text className="font-bold text-primary">
+                <View className="items-end">
+                  <Text className="font-black text-lg text-primary mb-1">
                     {numberWithComma(group.Total)}
                   </Text>
                   {expandedCompanies[group.CompanyName] ? (
-                    <ChevronUp size={20} color={colors.mutedForeground} />
+                    <ChevronUp size={20} color={colors.primary} />
                   ) : (
                     <ChevronDown size={20} color={colors.mutedForeground} />
                   )}
@@ -152,48 +163,51 @@ export function SalesReturnScreen() {
               </Pressable>
 
               {expandedCompanies[group.CompanyName] && (
-                <View className="bg-secondary/10 border-t border-border">
-                  <View className="flex-row bg-secondary/30 p-2 border-b border-border/30">
-                    <Text className="flex-[2] text-xs font-bold text-muted-foreground">
+                <View className="border-t border-border/40">
+                  <View className="flex-row bg-secondary/30 px-4 py-2 border-b border-border/30">
+                    <Text className="flex-[2] text-[10px] font-extrabold text-muted-foreground uppercase">
                       {t('element.product')}
                     </Text>
-                    <Text className="flex-1 text-xs font-bold text-muted-foreground text-right mr-2">
+                    <Text className="flex-1 text-[10px] font-extrabold text-muted-foreground uppercase text-right mr-2">
                       {t('element.qty')}
                     </Text>
-                    <Text className="flex-1 text-xs font-bold text-muted-foreground">
+                    <Text className="flex-1 text-[10px] font-extrabold text-muted-foreground uppercase">
                       {t('element.unit')}
                     </Text>
-                    <Text className="flex-1 text-xs font-bold text-muted-foreground text-right">
+                    <Text className="flex-1 text-[10px] font-extrabold text-muted-foreground uppercase text-right">
                       {t('element.total')}
                     </Text>
                   </View>
                   {group.Items.map((item, idx) => (
                     <View
                       key={idx}
-                      className="flex-row p-3 border-b border-border/20 items-center"
+                      className="flex-row px-4 py-3 border-b border-border/20 items-center hover:bg-secondary/5"
                     >
-                      <View className="flex-[2]">
-                        <Text className="text-sm font-medium text-foreground">
+                      <View className="flex-[2] mr-1">
+                        <Text className="text-xs font-bold text-foreground mb-0.5">
                           {item.Product_Name}
                         </Text>
-                        <Text className="text-xs text-muted-foreground">
+                        <Text
+                          className="text-[10px] text-muted-foreground"
+                          numberOfLines={1}
+                        >
                           {item.Descr}
                         </Text>
                       </View>
-                      <Text className="flex-1 text-sm text-foreground text-right mr-2">
+                      <Text className="flex-1 text-xs font-medium text-foreground text-right mr-2">
                         {numberWithComma(item.Qty)}
                       </Text>
-                      <Text className="flex-1 text-sm text-muted-foreground">
+                      <Text className="flex-1 text-xs text-muted-foreground font-medium uppercase">
                         {item.Unit}
                       </Text>
-                      <Text className="flex-1 text-sm font-bold text-foreground text-right">
+                      <Text className="flex-1 text-xs font-bold text-foreground text-right">
                         {numberWithComma(item.Amount)}
                       </Text>
                     </View>
                   ))}
                 </View>
               )}
-            </Card>
+            </View>
           ))}
         </View>
       </ScrollView>

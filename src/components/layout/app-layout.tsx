@@ -1,6 +1,9 @@
 import React from 'react';
-import { View, Text, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, Pressable, Platform } from 'react-native';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { cn } from '../../lib/utils';
@@ -25,11 +28,12 @@ export function AppLayout({
 }: LayoutProps) {
   const navigation = useNavigation();
   const colors = useThemeColor();
+  const insets = useSafeAreaInsets();
 
   return (
     <SafeAreaView
       className={cn('flex-1 bg-background', containerClasses)}
-      edges={['top']}
+      edges={['top', 'left', 'right']}
     >
       <View className="px-4 py-3 border-b border-border">
         <View className="flex-row items-center justify-between">
@@ -50,7 +54,10 @@ export function AppLayout({
           </View>
         </View>
       </View>
-      <View className={cn('flex-1 p-2', contentContainerClasses)}>
+      <View
+        className={cn('flex-1 p-2', contentContainerClasses)}
+        style={{ paddingBottom: insets.bottom }}
+      >
         {children}
       </View>
     </SafeAreaView>

@@ -14,10 +14,10 @@ import {
   UIManager,
 } from 'react-native';
 import { useFetchWithParams } from '../../hooks/use-fetch';
-import { useConnection } from '../../hooks/use-connection';
 import { useTranslation } from 'react-i18next';
 import { UserContext } from '../../contexts/app-context';
-import { dateFormatted, numberWithComma, cls } from '../../utils/helpers';
+import { dateFormatted, numberWithComma } from '../../utils/helpers';
+import { cn } from '../../lib/utils';
 import { useThemeColor } from '../../lib/colors';
 import {
   ChevronDown,
@@ -25,7 +25,6 @@ import {
   Check,
   X,
   ArrowLeft,
-  MessageSquare,
   History,
   Info,
   RotateCcw,
@@ -34,7 +33,11 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { useSwipe } from '../../hooks/use-swipe';
 import { Card } from '../../components/ui/card';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import { useConnection } from '../../hooks/use-connection';
 
 if (
   Platform.OS === 'android' &&
@@ -46,7 +49,7 @@ if (
 export function ApproveDetailScreen({ navigation, route }: any) {
   const colors = useThemeColor();
   const { t } = useTranslation();
-  const user = useContext(UserContext);
+  const user = useContext(UserContext) as any;
   const { apiClient } = useConnection();
 
   const {
@@ -66,8 +69,6 @@ export function ApproveDetailScreen({ navigation, route }: any) {
 
   const [refreshing, setRefreshing] = useState(false);
   const [invoices, setInvoices] = useState<any[]>([]);
-  const [memoModalVisible, setMemoModalVisible] = useState(false);
-  const [currentMemo, setCurrentMemo] = useState({ invoice: '', memo: '' });
 
   // History Modal State
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
@@ -167,6 +168,25 @@ export function ApproveDetailScreen({ navigation, route }: any) {
     }
   };
 
+  const handleUpdateMemo = async (invoiceNo: string, memo: string) => {
+    try {
+      await apiClient.post('api/bridge/update_memo', {
+        invoice: invoiceNo,
+        memo: memo,
+      });
+      setInvoices(current =>
+        current.map(inv =>
+          inv.invoice === invoiceNo ? { ...inv, Memo: memo } : inv,
+        ),
+      );
+    } catch (e) {
+      ToastAndroid.show(
+        t('approve.salesApprove.errorSavingMemo'),
+        ToastAndroid.SHORT,
+      );
+    }
+  };
+
   const handleApproveAll = async () => {
     const allApproved = invoices.every(i => i.approve);
     const newState = !allApproved;
@@ -188,28 +208,6 @@ export function ApproveDetailScreen({ navigation, route }: any) {
     } catch (e) {
       ToastAndroid.show(
         t('approve.salesApprove.failedUpdateAll'),
-        ToastAndroid.SHORT,
-      );
-    }
-  };
-
-  const saveMemo = async () => {
-    try {
-      const response = await apiClient.post('api/bridge/update_memo', {
-        invoice: currentMemo.invoice,
-        memo: currentMemo.memo,
-      });
-      if (response.data.status === 200) {
-        ToastAndroid.show(
-          t('approve.salesApprove.memoUpdated'),
-          ToastAndroid.SHORT,
-        );
-        setMemoModalVisible(false);
-        onRefresh();
-      }
-    } catch (e) {
-      ToastAndroid.show(
-        t('approve.salesApprove.errorSavingMemo'),
         ToastAndroid.SHORT,
       );
     }
@@ -259,7 +257,7 @@ export function ApproveDetailScreen({ navigation, route }: any) {
     }
   };
 
-  const { onTouchStart, onTouchEnd } = useSwipe(onSwipeLeft, onSwipeRight, 6);
+  const { onTouchStart, onTouchEnd } = useSwipe(onSwipeLeft, onSwipeRight, 3);
 
   const grandTotal = invoices.reduce(
     (acc: number, curr: any) => acc + (curr.Total || 0),
@@ -269,11 +267,23 @@ export function ApproveDetailScreen({ navigation, route }: any) {
     (acc: number, curr: any) => acc + (curr.Total - (curr.cogs || 0) || 0),
     0,
   );
+  const grandCogs = invoices.reduce(
+    (acc: number, curr: any) => acc + (curr.cogs || 0),
+    0,
+  );
+  const avgMargin = grandCogs > 0 ? (grandProfit / grandCogs) * 100 : 0;
+
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView
+    <View
       className="flex-1 bg-background"
-      edges={['top', 'left', 'right']}
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+        paddingBottom: insets.bottom,
+      }}
     >
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-border bg-card">
@@ -321,35 +331,56 @@ export function ApproveDetailScreen({ navigation, route }: any) {
           onTouchEnd={onTouchEnd}
         >
           {/* Summary Header */}
-          <View className="flex-row gap-3 mb-6">
-            <Card className="flex-1 p-3 bg-primary/5 border-primary/20">
-              <Text className="text-[10px] uppercase font-bold text-primary mb-1">
+          <View className="flex-row gap-2 mb-6">
+            <View className="flex-1 p-2 rounded-xl border border-primary/30 bg-primary/5">
+              <Text
+                className="text-[8px] uppercase font-extrabold text-primary mb-1"
+                numberOfLines={1}
+              >
                 {t('approve.salesApprove.totalAmount')}
               </Text>
-              <Text className="text-lg font-bold text-primary">
+              <Text className="text-sm font-bold text-primary">
                 {numberWithComma(grandTotal)}
               </Text>
-            </Card>
-            <Card className="flex-1 p-3 bg-green-500/5 border-green-500/20">
-              <Text className="text-[10px] uppercase font-bold text-green-600 mb-1">
+            </View>
+            <View className="flex-1 p-2 rounded-xl border border-green-500/30 bg-green-500/5">
+              <Text
+                className="text-[8px] uppercase font-extrabold text-green-600 mb-1"
+                numberOfLines={1}
+              >
                 {t('approve.salesApprove.totalProfit')}
               </Text>
-              <Text className="text-lg font-bold text-green-600">
+              <Text className="text-sm font-bold text-green-600">
                 {numberWithComma(grandProfit)}
               </Text>
-            </Card>
+            </View>
+            <View className="flex-1 p-2 rounded-xl border border-amber-500/30 bg-amber-500/5">
+              <Text
+                className="text-[8px] uppercase font-extrabold text-amber-600 mb-1"
+                numberOfLines={1}
+              >
+                {t('element.margin')}
+              </Text>
+              <Text className="text-sm font-bold text-amber-600">
+                {avgMargin.toFixed(1)}%
+              </Text>
+            </View>
           </View>
 
-          <Button
-            label={
-              invoices.every(i => i.approve)
-                ? t('approve.salesApprove.unapproveEverything')
-                : t('approve.salesApprove.approveEverything')
-            }
-            variant={invoices.every(i => i.approve) ? 'destructive' : 'default'}
+          <TouchableOpacity
             onPress={handleApproveAll}
-            className="mb-6 rounded-xl h-12"
-          />
+            activeOpacity={0.8}
+            className={cn(
+              'mb-6 rounded-xl h-12 items-center justify-center shadow-sm',
+              invoices.every(i => i.approve) ? 'bg-destructive' : 'bg-primary',
+            )}
+          >
+            <Text className="text-base font-bold text-white uppercase tracking-tight w-full text-center">
+              {invoices.every(i => i.approve)
+                ? t('approve.salesApprove.unapproveEverything')
+                : t('approve.salesApprove.approveEverything')}
+            </Text>
+          </TouchableOpacity>
 
           {isLoading ? (
             <View className="py-20 items-center">
@@ -369,7 +400,7 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                   className="mb-6 overflow-hidden border border-border bg-card"
                 >
                   <Pressable
-                    className="p-4 bg-secondary/5 flex-row items-center justify-between"
+                    className="p-4 flex-row items-center justify-between"
                     onPress={() => toggleExpand(inv.invoice)}
                   >
                     <View className="flex-1">
@@ -378,10 +409,8 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                           {inv.invoice}
                         </Text>
                         {inv.approve && (
-                          <View className="bg-green-100 px-2 py-0.5 rounded">
-                            <Text className="text-[10px] text-green-700 font-bold uppercase">
-                              {t('approve.salesApprove.approved')}
-                            </Text>
+                          <View className="bg-green-100 p-1 rounded-full border border-green-200">
+                            <Check size={12} color={colors.green} />
                           </View>
                         )}
                       </View>
@@ -390,20 +419,25 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                       </Text>
                     </View>
                     <View className="flex-row items-center">
-                      <Pressable
+                      <TouchableOpacity
                         onPress={() => handleApprove(inv.invoice, inv.approve)}
-                        className="mr-3 p-2 bg-card rounded-full border border-border"
+                        className={cn(
+                          'mr-3 p-1 rounded-full border',
+                          inv.approve
+                            ? 'border-green-500 bg-green-50/50'
+                            : 'border-border bg-background',
+                        )}
                       >
                         {inv.approve ? (
-                          <X size={20} color={colors.destructive} />
-                        ) : (
                           <Check size={20} color={colors.green} />
+                        ) : (
+                          <Check size={20} color={colors.border} />
                         )}
-                      </Pressable>
+                      </TouchableOpacity>
                       {inv.expanded ? (
-                        <ChevronUp size={20} color={colors.mutedForeground} />
+                        <ChevronUp size={24} color={colors.foreground} />
                       ) : (
-                        <ChevronDown size={20} color={colors.mutedForeground} />
+                        <ChevronDown size={24} color={colors.foreground} />
                       )}
                     </View>
                   </Pressable>
@@ -496,34 +530,24 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                         </View>
                       </View>
 
-                      {/* Memo & History Actions */}
-                      <View className="flex-row gap-2 mb-6">
-                        <Button
-                          onPress={() => {
-                            setCurrentMemo({
-                              invoice: inv.invoice,
-                              memo: inv.Memo || '',
-                            });
-                            setMemoModalVisible(true);
-                          }}
-                          variant="outline"
-                          className="flex-1 h-10 rounded-lg"
-                        >
-                          <View className="flex-row items-center">
-                            <MessageSquare
-                              size={16}
-                              color={colors.foreground}
-                              className="mr-2"
-                            />
-                            <Text className="text-sm font-medium text-foreground">
-                              {t('approve.salesApprove.editMemo')}
-                            </Text>
-                          </View>
-                        </Button>
+                      {/* Inline Memo */}
+                      <View className="mb-6">
+                        <Text className="text-xs text-foreground font-bold mb-2 uppercase tracking-wide">
+                          {t('element.memo')}
+                        </Text>
+                        <Input
+                          placeholder={t('approve.salesApprove.enterMemo')}
+                          defaultValue={inv.Memo || ''}
+                          onEndEditing={e =>
+                            handleUpdateMemo(inv.invoice, e.nativeEvent.text)
+                          }
+                          multiline
+                          className="bg-secondary/10 border border-border/60 text-sm p-3 rounded-lg min-h-[50px]"
+                        />
                       </View>
 
                       {/* Items Section */}
-                      <Text className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">
+                      <Text className="text-xs font-bold text-foreground uppercase tracking-widest mb-4">
                         {t('approve.salesApprove.orderItems')}
                       </Text>
                       {inv.items.map((item: any, idx: number) => {
@@ -539,36 +563,50 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                         return (
                           <View
                             key={idx}
-                            className="mb-3 p-3 bg-secondary/5 rounded-xl border border-border/50"
+                            className="mb-4 p-4 bg-secondary/10 rounded-2xl border border-border/40"
                           >
-                            <View className="flex-row justify-between mb-2">
-                              <Pressable
-                                className="flex-1"
+                            <View className="flex-row justify-between mb-3">
+                              <TouchableOpacity
+                                className="flex-1 flex-row items-center flex-wrap"
                                 onPress={() =>
                                   fetchHistory(item.PKey, item.AccLoc)
                                 }
                               >
-                                <Text className="font-bold text-primary flex-row items-center">
-                                  {item.Product_Name}{' '}
-                                  <History size={10} color={colors.primary} />
+                                <Text className="font-extrabold text-primary text-sm uppercase mr-1">
+                                  {item.Product_Name}
                                 </Text>
-                              </Pressable>
-                              <Text className="font-bold text-foreground">
+                                <History size={14} color={colors.primary} />
+                              </TouchableOpacity>
+                              <Text className="font-black text-foreground text-sm">
                                 {numberWithComma(item.CQty)} {item.Unit}
                               </Text>
                             </View>
-                            <View className="flex-row gap-4 mt-2 pt-2 border-t border-border/20">
+
+                            <View className="flex-row justify-between pt-2">
                               <View className="flex-1">
-                                <Text className="text-[10px] text-muted-foreground font-bold">
+                                <Text className="text-[10px] text-muted-foreground font-bold mb-1 uppercase">
                                   {t('element.price')}/{t('element.discount')}
                                 </Text>
                                 <Text className="text-xs font-medium text-foreground">
                                   {numberWithComma(item.Price)} |{' '}
-                                  {numberWithComma(item.Discount)}
+                                  <Text
+                                    className="font-bold"
+                                    style={{
+                                      color:
+                                        item.Discount > 0
+                                          ? colors.destructive
+                                          : item.Discount < 0
+                                            ? colors.green
+                                            : colors.foreground,
+                                    }}
+                                  >
+                                    {numberWithComma(item.Discount)}
+                                  </Text>
                                 </Text>
                               </View>
-                              <View className="flex-1">
-                                <Text className="text-[10px] text-muted-foreground font-bold">
+
+                              <View className="flex-1 items-center">
+                                <Text className="text-[10px] text-muted-foreground font-bold mb-1 uppercase">
                                   {t('element.margin')}
                                 </Text>
                                 <Text
@@ -583,8 +621,9 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                                   {Number(item.Margin).toFixed(1)}%
                                 </Text>
                               </View>
-                              <View className="flex-1">
-                                <Text className="text-[10px] text-muted-foreground font-bold">
+
+                              <View className="flex-1 items-end">
+                                <Text className="text-[10px] text-muted-foreground font-bold mb-1 uppercase">
                                   {t('element.stock')} (1|2|3)
                                 </Text>
                                 <Text
@@ -609,38 +648,6 @@ export function ApproveDetailScreen({ navigation, route }: any) {
       </View>
 
       {/* Modals are kept similar but with improved styling */}
-      <Modal visible={memoModalVisible} transparent animationType="fade">
-        <View className="flex-1 justify-center p-4 bg-black/60">
-          <Card className="p-6 bg-card">
-            <Text className="text-lg font-bold mb-4">
-              {t('approve.salesApprove.editMemo')}: {currentMemo.invoice}
-            </Text>
-            <Input
-              value={currentMemo.memo}
-              onChangeText={txt =>
-                setCurrentMemo({ ...currentMemo, memo: txt })
-              }
-              placeholder={t('approve.salesApprove.enterMemo')}
-              multiline
-              numberOfLines={4}
-              className="mb-4"
-            />
-            <View className="flex-row gap-3">
-              <Button
-                label={t('element.save')}
-                onPress={saveMemo}
-                className="flex-1"
-              />
-              <Button
-                label={t('element.cancel')}
-                variant="outline"
-                onPress={() => setMemoModalVisible(false)}
-                className="flex-1"
-              />
-            </View>
-          </Card>
-        </View>
-      </Modal>
 
       <Modal visible={historyModalVisible} transparent animationType="slide">
         <View className="flex-1 justify-end bg-black/60">
@@ -715,6 +722,6 @@ export function ApproveDetailScreen({ navigation, route }: any) {
           </View>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }

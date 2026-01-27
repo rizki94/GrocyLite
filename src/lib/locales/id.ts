@@ -97,6 +97,9 @@ export default {
     noData: 'Tidak ada data',
     loadingApp: 'Memuat Grocy Lite...',
     loading: 'Memuat...',
+    selectAll: 'Pilih Semua',
+    deselectAll: 'Batalkan Pilihan',
+    selected: 'Terpilih',
   },
   login: {
     user: 'User',

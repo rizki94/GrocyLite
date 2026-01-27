@@ -13,6 +13,7 @@ import {
 import { useColorScheme } from 'nativewind';
 import { usePermissions } from '../hooks/use-permissions';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const Tab = createBottomTabNavigator();
 
@@ -32,6 +33,7 @@ export function MainTabNavigator() {
   ];
 
   const warehousePermissions = ['stock-opname-list'];
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -41,8 +43,8 @@ export function MainTabNavigator() {
           backgroundColor: isDark ? '#1b1b1f' : '#fcfcfc',
           borderTopWidth: 1,
           borderTopColor: isDark ? '#3d3d41' : '#e3e3e5',
-          height: 60,
-          paddingBottom: 10,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom + 10,
           paddingTop: 10,
         },
         tabBarActiveTintColor: isDark ? '#00a991' : '#5dd4bf',

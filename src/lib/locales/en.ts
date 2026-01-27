@@ -96,7 +96,10 @@ export default {
     change: 'Change',
     noData: 'No data',
     loadingApp: 'Loading Grocy Lite...',
-    loading: "Loading..."
+    loading: 'Loading...',
+    selectAll: 'Select All',
+    deselectAll: 'Deselect All',
+    selected: 'Selected',
   },
   login: {
     user: 'User',

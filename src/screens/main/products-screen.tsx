@@ -22,7 +22,11 @@ import {
 import { useConnection } from '../../hooks/use-connection';
 import { numberWithComma } from '../../utils/helpers';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import { cn } from '../../lib/utils';
 import { Loading } from '../../components/ui/loading';
 import { ActivityIndicator } from 'react-native';
 
@@ -189,10 +193,17 @@ export function ProductsScreen() {
     </Card>
   );
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView
+    <View
       className="flex-1 bg-background"
-      edges={['top', 'left', 'right']}
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+        paddingBottom: insets.bottom,
+      }}
     >
       <View className="bg-card border-b border-border mb-4">
         <View className="flex-row items-center justify-between px-4 py-3">
@@ -264,6 +275,6 @@ export function ProductsScreen() {
         />
         {isLoading && page === 1 && <Loading isLoading={isLoading} />}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }

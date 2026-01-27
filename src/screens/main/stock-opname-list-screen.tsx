@@ -24,7 +24,7 @@ import { DatePicker } from '../../components/ui/date-picker';
 import { Loading } from '../../components/ui/loading';
 import moment from 'moment';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface StockOpnameItem {
   date: string;
@@ -103,17 +103,19 @@ export function StockOpnameListScreen() {
 
   useEffect(() => {
     fetchStockOpnames(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refetch when date range changes
   useEffect(() => {
-    if (startDate || endDate) {
-      // Trigger fetch if either date is set
+    if (startDate && endDate) {
+      // Trigger fetch if both dates are set
       setCurrentPage(1);
       setHasMore(true);
       fetchStockOpnames(1);
     }
-  }, [startDate, endDate, fetchStockOpnames]); // Added fetchStockOpnames to dependencies
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate]); // Removed fetchStockOpnames to prevent infinite loop
 
   const onRefresh = useCallback(() => {
     setCurrentPage(1);
@@ -164,10 +166,16 @@ export function StockOpnameListScreen() {
     );
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView
+    <View
       className="flex-1 bg-background"
-      edges={['top', 'left', 'right']}
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
     >
       {/* Header */}
       <View className="bg-card border-b border-border">
@@ -224,7 +232,7 @@ export function StockOpnameListScreen() {
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 16,
-            paddingBottom: 100,
+            paddingBottom: insets.bottom + 100,
           }}
           showsVerticalScrollIndicator={false}
           onEndReached={loadMore}
@@ -247,14 +255,14 @@ export function StockOpnameListScreen() {
 
       {/* Floating Add Button */}
       <Pressable
-        className="absolute bottom-6 right-6 w-14 h-14 bg-primary rounded-full items-center justify-center shadow-lg active:scale-95"
-        style={{ elevation: 8 }}
+        className="absolute right-6 w-14 h-14 bg-primary rounded-full items-center justify-center shadow-lg active:scale-95"
+        style={{ elevation: 8, bottom: insets.bottom + 24 }}
         onPress={() => {
           navigation.navigate('StockOpnameDetail', { invoice: 0 });
         }}
       >
         <Plus size={28} color="#ffffff" />
       </Pressable>
-    </SafeAreaView>
+    </View>
   );
 }

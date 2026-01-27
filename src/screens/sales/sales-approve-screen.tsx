@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFetchWithParams } from '../../hooks/use-fetch';
-import { dateFormatted, numberWithComma, cls } from '../../utils/helpers';
+import { dateFormatted, numberWithComma } from '../../utils/helpers';
+import { cn } from '../../lib/utils';
 import { useThemeColor } from '../../lib/colors';
 import {
   ArrowLeft,
@@ -85,7 +86,9 @@ export function SalesApproveScreen({ navigation }: any) {
   const summary = useMemo(() => {
     const totalAmount = groupedList.reduce((acc, curr) => acc + curr.Amount, 0);
     const totalProfit = groupedList.reduce((acc, curr) => acc + curr.Profit, 0);
-    return { totalAmount, totalProfit };
+    const totalCogs = totalAmount - totalProfit;
+    const avgMargin = totalCogs > 0 ? (totalProfit / totalCogs) * 100 : 0;
+    return { totalAmount, totalProfit, avgMargin };
   }, [groupedList]);
 
   const activeTabStyle = {
@@ -142,8 +145,9 @@ export function SalesApproveScreen({ navigation }: any) {
         <View className="flex-row items-center justify-between pt-3 border-t border-border/50">
           <View className="flex-row items-center">
             <View
-              className={cls(
-                `p-1.5 rounded-full mr-2 ${item.Profit >= 0 ? 'bg-green-100' : 'bg-red-100'}`,
+              className={cn(
+                'p-1.5 rounded-full mr-2',
+                item.Profit >= 0 ? 'bg-green-100' : 'bg-red-100',
               )}
             >
               {item.Profit >= 0 ? (
@@ -177,10 +181,17 @@ export function SalesApproveScreen({ navigation }: any) {
     </Card>
   );
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView
+    <View
       className="flex-1 bg-background"
-      edges={['top', 'left', 'right']}
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+        paddingBottom: insets.bottom,
+      }}
     >
       {/* Header */}
       <View className="bg-card border-b border-border">
@@ -222,8 +233,9 @@ export function SalesApproveScreen({ navigation }: any) {
               style={!status ? activeTabStyle : {}}
             >
               <Text
-                className={cls(
-                  `text-sm font-bold ${!status ? 'text-primary' : 'text-muted-foreground'}`,
+                className={cn(
+                  'text-sm font-bold',
+                  !status ? 'text-primary' : 'text-muted-foreground',
                 )}
               >
                 {t('approve.salesApprove.notApproved')}
@@ -235,8 +247,9 @@ export function SalesApproveScreen({ navigation }: any) {
               style={status ? activeTabStyle : {}}
             >
               <Text
-                className={cls(
-                  `text-sm font-bold ${status ? 'text-primary' : 'text-muted-foreground'}`,
+                className={cn(
+                  'text-sm font-bold',
+                  status ? 'text-primary' : 'text-muted-foreground',
                 )}
               >
                 {t('approve.salesApprove.approved')}
@@ -248,23 +261,40 @@ export function SalesApproveScreen({ navigation }: any) {
 
       <View className="flex-1 p-4">
         {/* Dynamic Summary Dashboard */}
-        <View className="flex-row gap-3 mb-4">
-          <Card className="flex-1 p-3 bg-primary/5 border-primary/20">
-            <Text className="text-[10px] uppercase font-bold text-primary mb-1">
+        <View className="flex-row gap-2 mb-4">
+          <View className="flex-1 p-2 rounded-xl border border-primary/30 bg-primary/5">
+            <Text
+              className="text-[8px] uppercase font-extrabold text-primary mb-1"
+              numberOfLines={1}
+            >
               {t('approve.salesApprove.totalSales')}
             </Text>
-            <Text className="text-lg font-bold text-primary">
+            <Text className="text-sm font-bold text-primary">
               {numberWithComma(summary.totalAmount)}
             </Text>
-          </Card>
-          <Card className="flex-1 p-3 bg-green-500/5 border-green-500/20">
-            <Text className="text-[10px] uppercase font-bold text-green-600 mb-1">
+          </View>
+          <View className="flex-1 p-2 rounded-xl border border-green-500/30 bg-green-500/5">
+            <Text
+              className="text-[8px] uppercase font-extrabold text-green-600 mb-1"
+              numberOfLines={1}
+            >
               {t('approve.salesApprove.totalProfit')}
             </Text>
-            <Text className="text-lg font-bold text-green-600">
+            <Text className="text-sm font-bold text-green-600">
               {numberWithComma(summary.totalProfit)}
             </Text>
-          </Card>
+          </View>
+          <View className="flex-1 p-2 rounded-xl border border-amber-500/30 bg-amber-500/5">
+            <Text
+              className="text-[8px] uppercase font-extrabold text-amber-600 mb-1"
+              numberOfLines={1}
+            >
+              {t('element.margin')}
+            </Text>
+            <Text className="text-sm font-bold text-amber-600">
+              {summary.avgMargin.toFixed(1)}%
+            </Text>
+          </View>
         </View>
         <View className="relative mb-4">
           <View className="absolute left-3 top-2.5 z-10">
@@ -294,6 +324,6 @@ export function SalesApproveScreen({ navigation }: any) {
 
         <Loading isLoading={isLoading} />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }

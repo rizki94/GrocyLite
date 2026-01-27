@@ -10,7 +10,11 @@ import {
   ToastAndroid,
   TouchableOpacity,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import { cn } from '../../lib/utils';
 import { useFetch, useFetchWithParams } from '../../hooks/use-fetch';
 import { dateFormatted } from '../../utils/helpers';
 import {
@@ -497,10 +501,17 @@ export function StockOpnameScreen() {
     return stock?.find((s: any) => s.PKey === productId)?.Source || '';
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView
+    <View
       className="flex-1 bg-background"
-      edges={['top', 'left', 'right']}
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+        paddingBottom: insets.bottom,
+      }}
     >
       {/* Top Navigation */}
       <View className="bg-card border-b border-border shadow-sm">
@@ -890,7 +901,7 @@ export function StockOpnameScreen() {
           );
         })}
 
-        <View className="h-24" />
+        <View style={{ height: insets.bottom + 96 }} />
       </ScrollView>
 
       {/* Date & Notes Modal */}
@@ -1129,7 +1140,10 @@ export function StockOpnameScreen() {
       </Modal>
 
       {/* Floating Action Buttons */}
-      <View className="absolute bottom-6 right-6 flex-row gap-3">
+      <View
+        className="absolute right-6 flex-row gap-3"
+        style={{ bottom: insets.bottom + 24 }}
+      >
         {Boolean(_invoice && status === 0) && (
           <Pressable
             onPress={handleApprove}
@@ -1162,6 +1176,6 @@ export function StockOpnameScreen() {
       </View>
 
       {(invoiceLoading || stockLoading) && <Loading isLoading={true} />}
-    </SafeAreaView>
+    </View>
   );
 }

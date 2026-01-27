@@ -10,6 +10,7 @@ import { AppLayout } from '../../components/layout/app-layout';
 import { Card, CardContent } from '../../components/ui/card';
 import { useFetchWithParams, useFetch } from '../../hooks/use-fetch';
 import { dateFormatted, numberWithComma } from '../../utils/helpers';
+import { cn } from '../../lib/utils';
 import {
   Package,
   TrendingUp,
@@ -120,66 +121,71 @@ export function HomeScreen() {
             className="w-[48%] mb-4"
             onPress={() => navigation.navigate('SalesReport' as never)}
           >
-            <Card className="border-0 bg-secondary/30 p-4">
-              <View className="p-2 rounded-lg bg-primary/10 w-10 h-10 items-center justify-center mb-2">
+            <View className="p-4 rounded-2xl border border-primary/30 bg-primary/5">
+              <View className="p-2 rounded-xl bg-primary/10 w-10 h-10 items-center justify-center mb-3">
                 <TrendingUp size={20} color={colors.primary} />
               </View>
-              <Text className="text-2xl font-bold text-foreground">
+              <Text className="text-xl font-black text-foreground">
                 {numberWithComma(omzetStats.today)}
               </Text>
-              <Text className="text-xs text-muted-foreground mt-1">
+              <Text className="text-[10px] text-muted-foreground font-extrabold uppercase mt-1">
                 {t('dashboard.todayOmzet')}
               </Text>
               <Text
-                className={`text-[10px] mt-1 font-bold ${omzetStats.percentage >= 0 ? 'text-emerald-500' : 'text-destructive'}`}
+                className={cn(
+                  'text-[10px] mt-2 font-bold',
+                  omzetStats.percentage >= 0
+                    ? 'text-emerald-500'
+                    : 'text-destructive',
+                )}
               >
                 {omzetStats.percentage >= 0 ? '+' : ''}
-                {omzetStats.percentage.toFixed(2)}% {t('dashboard.vsLastWeek')}
+                {omzetStats.percentage.toFixed(1)}% vs {t('general.lastWeek')}
               </Text>
-            </Card>
+            </View>
           </Pressable>
 
           <Pressable
             className="w-[48%] mb-4"
             onPress={() => navigation.navigate('Warehouse' as never)}
           >
-            <Card className="border-0 bg-secondary/30 p-4">
-              <View className="p-2 rounded-lg bg-amber-500/10 dark:bg-amber-400/20 w-10 h-10 items-center justify-center mb-2">
+            <View className="p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5">
+              <View className="p-2 rounded-xl bg-amber-500/10 w-10 h-10 items-center justify-center mb-3">
                 <Package size={20} color={colors.amber} />
               </View>
-              <Text className="text-2xl font-bold text-foreground">
+              <Text className="text-xl font-black text-foreground">
                 {numberWithComma(stockTotal)}
               </Text>
-              <Text className="text-xs text-muted-foreground mt-1">
+              <Text className="text-[10px] text-muted-foreground font-extrabold uppercase mt-1">
                 {t('dashboard.totalStock')}
               </Text>
-            </Card>
+            </View>
           </Pressable>
 
           <Pressable
             className="w-[100%]"
             onPress={() => navigation.navigate('Purchase' as never)}
           >
-            <Card className="border-0 bg-secondary/30 p-4">
+            <View className="p-4 rounded-2xl border border-blue-500/30 bg-blue-500/5">
               <View className="flex-row items-center justify-between">
                 <View>
-                  <View className="p-2 rounded-lg bg-blue-500/10 dark:bg-blue-400/20 w-10 h-10 items-center justify-center mb-2">
+                  <View className="p-2 rounded-xl bg-blue-500/10 w-10 h-10 items-center justify-center mb-3">
                     <BarChart3 size={20} color={colors.blue} />
                   </View>
-                  <Text className="text-2xl font-bold text-foreground">
+                  <Text className="text-xl font-black text-foreground">
                     {numberWithComma(purchaseTotal)}
                   </Text>
-                  <Text className="text-xs text-muted-foreground mt-1">
+                  <Text className="text-[10px] text-muted-foreground font-extrabold uppercase mt-1">
                     {t('dashboard.totalPurchasing')}
                   </Text>
                 </View>
                 <ArrowRight
                   size={24}
-                  color={colors.mutedForeground}
+                  color={colors.blue}
                   style={{ opacity: 0.3 }}
                 />
               </View>
-            </Card>
+            </View>
           </Pressable>
         </View>
 
@@ -190,9 +196,9 @@ export function HomeScreen() {
         <View className="flex-row gap-4 mb-4">
           <Pressable
             onPress={() => navigation.navigate('Attendance' as never)}
-            className="flex-1 bg-emerald-500 p-4 rounded-2xl items-center justify-center shadow-lg active:opacity-80"
+            className="flex-1 bg-primary p-4 rounded-2xl items-center justify-center shadow-lg active:opacity-80"
           >
-            <MapPin size={24} color="#ffffff" />
+            <MapPin size={24} color={colors.primaryForeground} />
             <Text className="text-primary-foreground font-medium">
               {t('dashboard.attendance')}
             </Text>
@@ -219,23 +225,33 @@ export function HomeScreen() {
             <Text className="text-lg font-bold text-foreground mb-4">
               {t('dashboard.stockBreakdown')}
             </Text>
-            <Card className="mb-8">
-              <CardContent className="p-4">
-                {dashboardStock.map((item: any, i: number) => (
-                  <View
-                    key={i}
-                    className={`flex-row items-center justify-between py-3 ${i !== dashboardStock.length - 1 ? 'border-b border-border' : ''}`}
-                  >
-                    <Text className="font-medium text-foreground">
-                      {item.Source}
-                    </Text>
-                    <Text className="font-bold text-primary">
-                      {numberWithComma(item.Amount)}
-                    </Text>
-                  </View>
-                ))}
-              </CardContent>
-            </Card>
+            {/* Stock Breakdown */}
+            {Array.isArray(dashboardStock) && dashboardStock.length > 0 && (
+              <View className="mb-10">
+                <Text className="text-lg font-bold text-foreground mb-4">
+                  {t('dashboard.stockBreakdown')}
+                </Text>
+                <View className="bg-secondary/10 rounded-2xl border border-border/50 p-4">
+                  {dashboardStock.map((item: any, i: number) => (
+                    <View
+                      key={i}
+                      className={cn(
+                        'flex-row items-center justify-between py-4',
+                        i !== dashboardStock.length - 1 &&
+                          'border-b border-border/30',
+                      )}
+                    >
+                      <Text className="font-extrabold text-foreground uppercase text-xs">
+                        {item.Source}
+                      </Text>
+                      <Text className="font-black text-primary text-base">
+                        {numberWithComma(item.Amount)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
           </>
         )}
       </ScrollView>
