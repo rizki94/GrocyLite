@@ -1,4 +1,10 @@
 export default {
+  common: {
+    connectionError: 'Kesalahan Koneksi',
+    serverUnavailable:
+      'Server saat ini tidak tersedia. Silakan periksa koneksi Anda atau coba lagi nanti.',
+    tryAgain: 'Coba Lagi',
+  },
   toast: {
     add: {
       success: 'Data Berhasil Ditambahkan',
@@ -73,12 +79,15 @@ export default {
     delete: 'Hapus',
     items: 'Item',
     days: 'hari',
+    close: 'Keluar',
+    priceDiscMarg: 'Harga / Disc (Laba)',
+    arLimit: 'AR / Limit',
   },
   general: {
     all: 'Semua',
     today: 'Hari ini',
     tommorow: 'Besok',
-    fromLastWeek: 'Dark Minggu Lalu',
+    lastWeek: 'Minggu Lalu',
     resultNotAvailable: 'Hasil Tidak Ditemukan',
     ok: 'Ok',
     cancel: 'Batal',
@@ -335,7 +344,7 @@ export default {
     reportSuccess: 'Kunjungan berhasil dilaporkan',
     reportFailed: 'Gagal melaporkan kunjungan',
   },
-  EsCoklat: {
+  esCoklat: {
     title: 'Es Coklat',
     stock: {
       title: 'Stok Es Coklat',
@@ -350,6 +359,11 @@ export default {
       qty: 'Qty',
       total: 'Total',
     },
+  },
+  finance: {
+    title: 'Keuangan',
+    accountPayableReport: 'Laporan Hutang Dagang',
+    accountReceivableReport: 'Laporan Piutang Dagang',
   },
   cancelTransaction: {
     title: 'Pembatalan Transaksi',

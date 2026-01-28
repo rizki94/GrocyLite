@@ -1,5 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { FinanceScreen } from '../screens/main/finance-screen';
 import { HomeScreen } from '../screens/main/home-screen';
 import { WarehouseScreen } from '../screens/main/warehouse-screen';
 import { SettingsScreen } from '../screens/main/settings-screen';
@@ -9,6 +10,7 @@ import {
   Warehouse as WarehouseIcon,
   Settings,
   DollarSign,
+  Wallet,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { usePermissions } from '../hooks/use-permissions';
@@ -27,12 +29,16 @@ export function MainTabNavigator() {
     'approve-invoice',
     'loss-profit-report',
     'sales-return-list',
-    'payment-ar-list',
-    'payment-ap-list',
-    'cancel-transaction',
+    'sales-omzet-report',
   ];
 
-  const warehousePermissions = ['stock-opname-list'];
+  const financePermissions = [
+    'payment-ar-list',
+    'payment-ap-list',
+    'purchase-report',
+  ];
+
+  const warehousePermissions = ['stock-opname-list', 'product-stock-list'];
   const insets = useSafeAreaInsets();
 
   return (
@@ -45,7 +51,7 @@ export function MainTabNavigator() {
           borderTopColor: isDark ? '#3d3d41' : '#e3e3e5',
           height: 60 + insets.bottom,
           paddingBottom: insets.bottom + 10,
-          paddingTop: 10,
+          paddingTop: 5,
         },
         tabBarActiveTintColor: isDark ? '#00a991' : '#5dd4bf',
         tabBarInactiveTintColor: isDark ? '#b0b0b4' : '#333337',
@@ -72,6 +78,19 @@ export function MainTabNavigator() {
             tabBarLabel: t('sales.title'),
             tabBarIcon: ({ color, size }) => (
               <DollarSign size={size} color={color} />
+            ),
+          }}
+        />
+      )}
+
+      {hasPermission(financePermissions) && (
+        <Tab.Screen
+          name="Finance"
+          component={FinanceScreen}
+          options={{
+            tabBarLabel: t('finance.title'),
+            tabBarIcon: ({ color, size }) => (
+              <Wallet size={size} color={color} />
             ),
           }}
         />

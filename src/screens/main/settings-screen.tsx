@@ -1,7 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { View, Text, Pressable, ScrollView, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppLayout } from '../../components/layout/app-layout';
 import { Card } from '../../components/ui/card';
 import { AuthContext, UserContext } from '../../contexts/app-context';
 import {
@@ -18,6 +17,7 @@ import { useColorScheme } from 'nativewind';
 import { useTranslation } from 'react-i18next';
 import { useThemeColor } from '../../lib/colors';
 import Logo from '../../assets/logo.svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function SettingsScreen() {
   const navigation = useNavigation();
@@ -26,6 +26,7 @@ export function SettingsScreen() {
   const { colorScheme, setColorScheme } = useColorScheme();
   const { i18n, t } = useTranslation();
   const colors = useThemeColor();
+  const insets = useSafeAreaInsets();
 
   const [themePreference, setThemePreference] = useState<
     'light' | 'dark' | 'system'
@@ -62,67 +63,90 @@ export function SettingsScreen() {
   ];
 
   return (
-    <AppLayout title={t('settings.title')}>
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+    <View
+      className="flex-1 bg-background"
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
+    >
+      <View className="bg-card border-b border-border shadow-sm">
+        <View className="flex-row items-center justify-between px-6 py-4">
+          <Text className="text-2xl font-black text-foreground tracking-tighter">
+            {t('settings.title')}
+          </Text>
+        </View>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        className="flex-1 px-4 pt-4"
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+      >
         {/* Profile Card */}
-        <Card className="mb-6 bg-primary border-0">
+        <Card className="mb-8 border-0 shadow-lg overflow-hidden rounded-[32px]">
           <Pressable
-            className="p-4 flex-row items-center active:opacity-80"
+            className="p-6 flex-row items-center bg-primary active:opacity-90"
             onPress={() => navigation.navigate('AccountDetail' as never)}
           >
-            <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mr-4">
+            <View className="w-16 h-16 bg-white/20 rounded-2xl items-center justify-center mr-4 border border-white/30">
               <User size={32} color="#ffffff" />
             </View>
             <View className="flex-1">
-              <Text className="text-xl font-bold text-white mb-1">
+              <Text className="text-xl font-black text-white tracking-tight">
                 {user?.name || 'Admin User'}
               </Text>
-              <Text className="text-sm text-white/80">
+              <Text className="text-xs font-bold text-white/70 uppercase tracking-widest mt-0.5">
                 {t('settings.administrator')}
               </Text>
             </View>
-            <ChevronRight size={20} color="rgba(255,255,255,0.5)" />
+            <View className="bg-white/10 p-2 rounded-xl">
+              <ChevronRight size={18} color="#ffffff" />
+            </View>
           </Pressable>
         </Card>
 
-        <Text className="text-sm font-bold text-muted-foreground uppercase mb-2 px-1">
+        <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
           {t('settings.preferences')}
         </Text>
-        <Card className="mb-6 overflow-hidden border border-border bg-card">
+        <Card className="mb-8 overflow-hidden border border-border/50 bg-card rounded-3xl">
           {/* Theme Selector */}
           <Pressable
-            className="flex-row items-center justify-between p-4 border-b border-border active:bg-secondary/50"
+            className="flex-row items-center justify-between p-5 border-b border-border/10 active:bg-secondary/20"
             onPress={() => setShowThemeModal(true)}
           >
             <View className="flex-row items-center">
-              <View className="w-8 h-8 rounded-lg bg-blue-500/10 dark:bg-blue-400/20 items-center justify-center mr-3">
-                <Moon size={18} color={colors.blue} />
+              <View className="w-10 h-10 rounded-xl bg-blue-500/10 dark:bg-blue-400/20 items-center justify-center mr-4">
+                <Moon size={20} color={colors.blue} />
               </View>
-              <Text className="text-foreground font-medium text-foreground">
+              <Text className="text-foreground font-bold">
                 {t('settings.theme')}
               </Text>
             </View>
             <View className="flex-row items-center">
-              <Text className="text-muted-foreground mr-2">{themeLabel}</Text>
+              <Text className="text-muted-foreground font-medium mr-2">
+                {themeLabel}
+              </Text>
               <ChevronRight size={16} color={colors.mutedForeground} />
             </View>
           </Pressable>
 
           {/* Language Selector */}
           <Pressable
-            className="flex-row items-center justify-between p-4 active:bg-secondary/50"
+            className="flex-row items-center justify-between p-5 active:bg-secondary/20"
             onPress={() => setShowLangModal(true)}
           >
             <View className="flex-row items-center">
-              <View className="w-8 h-8 rounded-lg bg-indigo-500/10 dark:bg-indigo-400/20 items-center justify-center mr-3">
-                <Globe size={18} color={colors.indigo} />
+              <View className="w-10 h-10 rounded-xl bg-indigo-500/10 dark:bg-indigo-400/20 items-center justify-center mr-4">
+                <Globe size={20} color={colors.indigo} />
               </View>
-              <Text className="text-foreground font-medium text-foreground">
+              <Text className="text-foreground font-bold">
                 {t('settings.languange')}
               </Text>
             </View>
             <View className="flex-row items-center">
-              <Text className="text-muted-foreground mr-2">
+              <Text className="text-muted-foreground font-medium mr-2">
                 {languageLabel}
               </Text>
               <ChevronRight size={16} color={colors.mutedForeground} />
@@ -130,30 +154,30 @@ export function SettingsScreen() {
           </Pressable>
         </Card>
 
-        <Text className="text-sm font-bold text-muted-foreground uppercase mb-2 px-1">
+        <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
           {t('settings.account.title')}
         </Text>
-        <Card className="mb-8 overflow-hidden border border-border bg-card">
+        <Card className="mb-8 overflow-hidden border border-border/50 bg-card rounded-3xl">
           <Pressable
-            className="flex-row items-center justify-between p-4 active:bg-destructive/10"
+            className="flex-row items-center justify-between p-5 active:bg-destructive/10"
             onPress={logout}
           >
             <View className="flex-row items-center">
-              <View className="w-8 h-8 rounded-lg bg-destructive/10 items-center justify-center mr-3">
-                <LogOut size={18} color={colors.destructive} />
+              <View className="w-10 h-10 rounded-xl bg-destructive/10 items-center justify-center mr-4">
+                <LogOut size={20} color={colors.destructive} />
               </View>
-              <Text className="text-foreground font-medium text-destructive">
+              <Text className="text-destructive font-black">
                 {t('element.logout')}
               </Text>
             </View>
           </Pressable>
         </Card>
 
-        <Text className="text-xs text-center text-muted-foreground mb-4">
-          {t('settings.version')} 1.0.0 (Build 504)
-        </Text>
-        <View className="items-center mb-8 opacity-20">
-          <Logo width={60} height={60} />
+        <View className="items-center mt-4">
+          <Logo width={48} height={48} opacity={0.3} />
+          <Text className="text-[10px] font-black text-muted-foreground uppercase tracking-[2px] mt-4 opacity-50">
+            {t('settings.version')} 1.0.0 (Build 504)
+          </Text>
         </View>
       </ScrollView>
 
@@ -169,32 +193,31 @@ export function SettingsScreen() {
           onPress={() => setShowThemeModal(false)}
         >
           <Pressable
-            className="bg-card rounded-lg overflow-hidden"
+            className="bg-card rounded-[32px] overflow-hidden border border-border/50"
             onPress={e => e.stopPropagation()}
           >
-            <View className="p-4 border-b border-border">
-              <Text className="text-lg font-bold text-foreground">
+            <View className="p-6 border-b border-border/10">
+              <Text className="text-lg font-black text-foreground tracking-tight">
                 {t('settings.selectThemeTitle')}
               </Text>
             </View>
             {themes.map(theme => (
               <Pressable
                 key={theme.value}
-                className="p-4 border-b border-border flex-row items-center justify-between active:bg-secondary/20"
+                className="p-5 border-b border-border/5 flex-row items-center justify-between active:bg-secondary/20"
                 onPress={async () => {
                   const val = theme.value as 'light' | 'dark' | 'system';
                   setThemePreference(val);
-
-                  // Simpler is better: Let NativeWind handle 'system' reset via the index.js patch
                   setColorScheme(val);
-
                   await AsyncStorage.setItem('user-theme-preference', val);
                   setShowThemeModal(false);
                 }}
               >
-                <Text className="text-base text-foreground">{theme.label}</Text>
+                <Text className="text-base text-foreground font-bold">
+                  {theme.label}
+                </Text>
                 {themePreference === theme.value && (
-                  <Check size={20} color={colors.primary} />
+                  <Check size={20} color={colors.primary} strokeWidth={3} />
                 )}
               </Pressable>
             ))}
@@ -214,32 +237,34 @@ export function SettingsScreen() {
           onPress={() => setShowLangModal(false)}
         >
           <Pressable
-            className="bg-card rounded-lg overflow-hidden"
+            className="bg-card rounded-[32px] overflow-hidden border border-border/50"
             onPress={e => e.stopPropagation()}
           >
-            <View className="p-4 border-b border-border">
-              <Text className="text-lg font-bold text-foreground">
+            <View className="p-6 border-b border-border/10">
+              <Text className="text-lg font-black text-foreground tracking-tight">
                 {t('settings.selectLanguageTitle')}
               </Text>
             </View>
             {languages.map(lang => (
               <Pressable
                 key={lang.value}
-                className="p-4 border-b border-border flex-row items-center justify-between active:bg-secondary/20"
+                className="p-5 border-b border-border/5 flex-row items-center justify-between active:bg-secondary/20"
                 onPress={() => {
                   i18n.changeLanguage(lang.value);
                   setShowLangModal(false);
                 }}
               >
-                <Text className="text-base text-foreground">{lang.label}</Text>
+                <Text className="text-base text-foreground font-bold">
+                  {lang.label}
+                </Text>
                 {currentLanguage === lang.value && (
-                  <Check size={20} color={colors.primary} />
+                  <Check size={20} color={colors.primary} strokeWidth={3} />
                 )}
               </Pressable>
             ))}
           </Pressable>
         </Pressable>
       </Modal>
-    </AppLayout>
+    </View>
   );
 }

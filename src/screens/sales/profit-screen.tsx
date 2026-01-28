@@ -30,6 +30,7 @@ import { DatePicker } from '../../components/ui/date-picker';
 import { Card } from '../../components/ui/card';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Loading } from '../../components/ui/loading';
+import { ConnectionError } from '../../components/connection-error';
 import { useTranslation } from 'react-i18next';
 
 const StatCard = ({ label, value, subValue, icon: Icon, color }: any) => (
@@ -80,14 +81,22 @@ export function ProfitScreen() {
     [startDate, endDate, release],
   );
 
-  const { data: omzetData, isLoading: loadingOmzet } = useFetchWithParams(
+  const {
+    data: omzetData,
+    isLoading: loadingOmzet,
+    fetchError: errorOmzet,
+  } = useFetchWithParams(
     'api/bridge/laba_rugi',
     { params: filters },
     filters,
     refreshing,
   );
 
-  const { data: routeData, isLoading: loadingRoute } = useFetchWithParams(
+  const {
+    data: routeData,
+    isLoading: loadingRoute,
+    fetchError: errorRoute,
+  } = useFetchWithParams(
     'api/bridge/laba_rugi_by_route',
     { params: filters },
     filters,
@@ -288,168 +297,168 @@ export function ProfitScreen() {
         </View>
       </View>
 
-      <ScrollView
-        className="flex-1"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
-        }
-      >
-        <View className="p-4">
-          <Text className="text-sm font-bold text-muted-foreground uppercase mb-3">
-            {t('sales.overallPerformance')}
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 12 }}
-          >
-            <StatCard
-              label={t('approve.salesApprove.totalSales')}
-              value={numberWithComma(summary.totalSales)}
-              icon={DollarSign}
-              color={colors.primary}
-            />
-            <StatCard
-              label={t('sales.grossProfit')}
-              value={numberWithComma(summary.totalProfit)}
-              subValue={`${summary.margin.toFixed(1)}%`}
-              icon={TrendingUp}
-              color={colors.green}
-            />
-            <StatCard
-              label={t('element.weight')}
-              value={numberWithComma(summary.totalWeight, 2)}
-              icon={WeightIcon}
-              color={colors.indigo}
-            />
-            <StatCard
-              label={t('element.volume')}
-              value={numberWithComma(summary.totalVolume, 2)}
-              icon={Package}
-              color={colors.amber}
-            />
-          </ScrollView>
-        </View>
-
-        <View className="p-4 border-t border-border/30">
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-sm font-bold text-muted-foreground uppercase">
-              {t('sales.breakdownDetails')}
-            </Text>
-            <TouchableOpacity
-              onPress={selectAll}
-              className="flex-row items-center bg-secondary/10 px-3 py-1.5 rounded-lg border border-border/50"
-            >
-              <Text className="text-[10px] font-bold text-primary uppercase mr-2">
-                {selectedIds.length === displayedData.length
-                  ? t('general.deselectAll')
-                  : t('general.selectAll')}
+      <ScrollView className="flex-1">
+        {errorOmzet && omzets.length === 0 ? (
+          <ConnectionError onRetry={onRefresh} message={errorOmzet} />
+        ) : (
+          <>
+            <View className="p-4">
+              <Text className="text-sm font-bold text-muted-foreground uppercase mb-3">
+                {t('sales.overallPerformance')}
               </Text>
-              {selectedIds.length === displayedData.length ? (
-                <CheckSquare size={14} color={colors.primary} />
-              ) : (
-                <Square size={14} color={colors.primary} />
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {displayedData.map((item: any, index: number) => {
-            const profit = Number(item.Profit || 0);
-            const margin =
-              Number(item.HPP) > 0 ? (profit / Number(item.HPP)) * 100 : 0;
-            const itemId = `${activeTab}-${index}`;
-            const isSelected = selectedIds.includes(itemId);
-            return (
-              <Card
-                key={itemId}
-                className={cn(
-                  'mb-4 overflow-hidden border bg-card',
-                  isSelected ? 'border-primary/50' : 'border-border',
-                )}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 12 }}
               >
+                <StatCard
+                  label={t('approve.salesApprove.totalSales')}
+                  value={numberWithComma(summary.totalSales)}
+                  icon={DollarSign}
+                  color={colors.primary}
+                />
+                <StatCard
+                  label={t('sales.grossProfit')}
+                  value={numberWithComma(summary.totalProfit)}
+                  subValue={`${summary.margin.toFixed(1)}%`}
+                  icon={TrendingUp}
+                  color={colors.green}
+                />
+                <StatCard
+                  label={t('element.weight')}
+                  value={numberWithComma(summary.totalWeight, 2)}
+                  icon={WeightIcon}
+                  color={colors.indigo}
+                />
+                <StatCard
+                  label={t('element.volume')}
+                  value={numberWithComma(summary.totalVolume, 2)}
+                  icon={Package}
+                  color={colors.amber}
+                />
+              </ScrollView>
+            </View>
+
+            <View className="p-4 border-t border-border/30">
+              <View className="flex-row items-center justify-between mb-4">
+                <Text className="text-sm font-bold text-muted-foreground uppercase">
+                  {t('sales.breakdownDetails')}
+                </Text>
                 <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => toggleSelection(itemId)}
-                  className="p-4"
+                  onPress={selectAll}
+                  className="flex-row items-center bg-secondary/10 px-3 py-1.5 rounded-lg border border-border/50"
                 >
-                  <View className="flex-row justify-between items-start mb-4">
-                    <View className="flex-1 flex-row items-center">
-                      <View className="mr-3">
-                        {isSelected ? (
-                          <View className="bg-primary p-0.5 rounded">
-                            <CheckSquare size={18} color="#fff" />
-                          </View>
-                        ) : (
-                          <Square size={18} color={colors.mutedForeground} />
-                        )}
-                      </View>
-                      <View>
-                        <Text className="text-base font-extrabold text-foreground uppercase">
-                          {item.Salesman || 'Unknown'}
-                        </Text>
-                        <Text className="text-xs text-muted-foreground mt-0.5">
-                          {item.Count || 0} Outlets
-                        </Text>
-                      </View>
-                    </View>
-                    <View className="items-end">
-                      <Text className="text-lg font-black text-primary">
-                        {numberWithComma(item.Amount)}
-                      </Text>
-                    </View>
-                  </View>
-                  <View className="flex-row bg-secondary/10 rounded-xl p-3">
-                    <View className="flex-1">
-                      <Text className="text-[9px] text-muted-foreground uppercase font-extrabold mb-1">
-                        Profit
-                      </Text>
-                      <Text
-                        className="text-xs font-bold"
-                        style={{
-                          color:
-                            profit >= 0 ? colors.green : colors.destructive,
-                        }}
-                      >
-                        {numberWithComma(profit)}
-                      </Text>
-                      <Text className="text-[10px] text-muted-foreground mt-0.5">
-                        {margin.toFixed(1)}%
-                      </Text>
-                    </View>
-                    <View className="w-[1px] bg-border/50 mx-2" />
-                    <View className="flex-1 items-center">
-                      <Text className="text-[9px] text-muted-foreground uppercase font-extrabold mb-1">
-                        Weight
-                      </Text>
-                      <Text className="text-xs font-bold text-foreground">
-                        {numberWithComma(item.Weight, 2)}
-                      </Text>
-                      <Text className="text-[10px] text-muted-foreground mt-0.5 uppercase">
-                        KG
-                      </Text>
-                    </View>
-                    <View className="w-[1px] bg-border/50 mx-2" />
-                    <View className="flex-1 items-end">
-                      <Text className="text-[9px] text-muted-foreground uppercase font-extrabold mb-1">
-                        Volume
-                      </Text>
-                      <Text className="text-xs font-bold text-foreground">
-                        {numberWithComma(item.Volume, 2)}
-                      </Text>
-                      <Text className="text-[10px] text-muted-foreground mt-0.5 uppercase">
-                        M³
-                      </Text>
-                    </View>
-                  </View>
+                  <Text className="text-[10px] font-bold text-primary uppercase mr-2">
+                    {selectedIds.length === displayedData.length
+                      ? t('general.deselectAll')
+                      : t('general.selectAll')}
+                  </Text>
+                  {selectedIds.length === displayedData.length ? (
+                    <CheckSquare size={14} color={colors.primary} />
+                  ) : (
+                    <Square size={14} color={colors.primary} />
+                  )}
                 </TouchableOpacity>
-              </Card>
-            );
-          })}
-        </View>
+              </View>
+
+              {displayedData.map((item: any, index: number) => {
+                const profit = Number(item.Profit || 0);
+                const margin =
+                  Number(item.HPP) > 0 ? (profit / Number(item.HPP)) * 100 : 0;
+                const itemId = `${activeTab}-${index}`;
+                const isSelected = selectedIds.includes(itemId);
+                return (
+                  <Card
+                    key={itemId}
+                    className={cn(
+                      'mb-4 overflow-hidden border bg-card',
+                      isSelected ? 'border-primary/50' : 'border-border',
+                    )}
+                  >
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => toggleSelection(itemId)}
+                      className="p-4"
+                    >
+                      <View className="flex-row justify-between items-start mb-4">
+                        <View className="flex-1 flex-row items-center">
+                          <View className="mr-3">
+                            {isSelected ? (
+                              <View className="bg-primary p-0.5 rounded">
+                                <CheckSquare size={18} color="#fff" />
+                              </View>
+                            ) : (
+                              <Square
+                                size={18}
+                                color={colors.mutedForeground}
+                              />
+                            )}
+                          </View>
+                          <View>
+                            <Text className="text-base font-extrabold text-foreground uppercase">
+                              {item.Salesman || 'Unknown'}
+                            </Text>
+                            <Text className="text-xs text-muted-foreground mt-0.5">
+                              {item.Count || 0} Outlets
+                            </Text>
+                          </View>
+                        </View>
+                        <View className="items-end">
+                          <Text className="text-lg font-black text-primary">
+                            {numberWithComma(item.Amount)}
+                          </Text>
+                        </View>
+                      </View>
+                      <View className="flex-row bg-secondary/10 rounded-xl p-3">
+                        <View className="flex-1">
+                          <Text className="text-[9px] text-muted-foreground uppercase font-extrabold mb-1">
+                            Profit
+                          </Text>
+                          <Text
+                            className="text-xs font-bold"
+                            style={{
+                              color:
+                                profit >= 0 ? colors.green : colors.destructive,
+                            }}
+                          >
+                            {numberWithComma(profit)}
+                          </Text>
+                          <Text className="text-[10px] text-muted-foreground mt-0.5">
+                            {margin.toFixed(1)}%
+                          </Text>
+                        </View>
+                        <View className="w-[1px] bg-border/50 mx-2" />
+                        <View className="flex-1 items-center">
+                          <Text className="text-[9px] text-muted-foreground uppercase font-extrabold mb-1">
+                            Weight
+                          </Text>
+                          <Text className="text-xs font-bold text-foreground">
+                            {numberWithComma(item.Weight, 2)}
+                          </Text>
+                          <Text className="text-[10px] text-muted-foreground mt-0.5 uppercase">
+                            KG
+                          </Text>
+                        </View>
+                        <View className="w-[1px] bg-border/50 mx-2" />
+                        <View className="flex-1 items-end">
+                          <Text className="text-[9px] text-muted-foreground uppercase font-extrabold mb-1">
+                            Volume
+                          </Text>
+                          <Text className="text-xs font-bold text-foreground">
+                            {numberWithComma(item.Volume, 2)}
+                          </Text>
+                          <Text className="text-[10px] text-muted-foreground mt-0.5 uppercase">
+                            M³
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </Card>
+                );
+              })}
+            </View>
+          </>
+        )}
         <View className="h-20" />
       </ScrollView>
 

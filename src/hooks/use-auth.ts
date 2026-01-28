@@ -129,7 +129,23 @@ export function useAuth() {
       }
     };
     loadSession();
-  }, []);
+
+    // Add interceptor for 401
+    const interceptor = apiClient.interceptors.response.use(
+      response => response,
+      async error => {
+        if (error.response?.status === 401) {
+          await auth.logout();
+          showToast('Session expired. Please login again.');
+        }
+        return Promise.reject(error);
+      },
+    );
+
+    return () => {
+      apiClient.interceptors.response.eject(interceptor);
+    };
+  }, [apiClient, auth]);
 
   return { auth, state };
 }

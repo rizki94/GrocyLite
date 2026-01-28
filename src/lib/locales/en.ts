@@ -1,4 +1,10 @@
 export default {
+  common: {
+    connectionError: 'Connection Error',
+    serverUnavailable:
+      'The server is currently unavailable. Please check your connection or try again later.',
+    tryAgain: 'Try Again',
+  },
   toast: {
     add: {
       success: 'Create Data Success',
@@ -73,12 +79,15 @@ export default {
     delete: 'Delete',
     items: 'Items',
     days: 'days',
+    close: 'Close',
+    priceDiscMarg: 'Price / Disc (Marg)',
+    arLimit: 'AR / Limit',
   },
   general: {
     all: 'All',
     today: 'Today',
     tommorow: 'Tommorow',
-    fromLastWeek: 'From Last Week',
+    lastWeek: 'Last Week',
     resultNotAvailable: 'Result Not Available',
     ok: 'Ok',
     cancel: 'Cancel',
@@ -361,6 +370,11 @@ export default {
       qty: 'Qty',
       total: 'Total',
     },
+  },
+  finance: {
+    title: 'Finance',
+    accountPayableReport: 'Account Payable Report',
+    accountReceivableReport: 'Account Receivable Report',
   },
   inventory: {
     title: 'Inventory',

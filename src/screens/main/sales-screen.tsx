@@ -1,6 +1,11 @@
-import React from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
-import { AppLayout } from '../../components/layout/app-layout';
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native';
 import {
   ClipboardCheck,
   FileBarChart,
@@ -9,22 +14,62 @@ import {
   RotateCcw,
   Wallet,
   CreditCard,
+  ArrowRight,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeColor } from '../../lib/colors';
 import { usePermissions } from '../../hooks/use-permissions';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFetch, useFetchWithParams } from '../../hooks/use-fetch';
+import { dateFormatted, numberWithComma } from '../../utils/helpers';
+import { Loading } from '../../components/ui/loading';
+import { ConnectionError } from '../../components/connection-error';
 
 export function SalesScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const colors = useThemeColor();
+  const insets = useSafeAreaInsets();
   const { hasPermission } = usePermissions();
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Fetch pending approvals for today
+  const {
+    data: pendingApprovals,
+    isLoading: loadingApprovals,
+    fetchError,
+  } = useFetchWithParams(
+    'api/bridge/approve_list',
+    { params: { date: dateFormatted(new Date()), status: 'false' } },
+    [],
+    refreshing,
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1000);
+  }, []);
+
+  const totalPendingAmount = Array.isArray(pendingApprovals)
+    ? pendingApprovals.reduce(
+        (acc: number, curr: any) => acc + Number(curr.Amount),
+        0,
+      )
+    : 0;
+
+  const totalPendingInvoices = Array.isArray(pendingApprovals)
+    ? pendingApprovals.reduce(
+        (acc: number, curr: any) => acc + Number(curr.Invoices),
+        0,
+      )
+    : 0;
 
   const menuItems = [
     {
       title: t('approve.salesApprove.approveList'),
+      description: t('approve.salesApprove.invoicesPending'),
       icon: ClipboardCheck,
       color: colors.green,
       bgColor: 'bg-green-500/10 dark:bg-green-400/20',
@@ -33,6 +78,7 @@ export function SalesScreen() {
     },
     {
       title: t('sales.omzetReport'),
+      description: t('sales.omzetReport'),
       icon: FileBarChart,
       color: colors.primary,
       bgColor: 'bg-primary/10 dark:bg-primary/20',
@@ -41,6 +87,7 @@ export function SalesScreen() {
     },
     {
       title: t('sales.profitLoss'),
+      description: t('sales.profitLoss'),
       icon: BarChart3,
       color: colors.blue,
       bgColor: 'bg-blue-500/10 dark:bg-blue-400/20',
@@ -48,66 +95,111 @@ export function SalesScreen() {
       permission: 'loss-profit-report',
     },
     {
-      title: t('cancelTransaction.title'),
-      icon: Ban,
-      color: colors.destructive,
-      bgColor: 'bg-destructive/10 dark:bg-destructive/20',
-      route: 'CancelTransaction',
-      permission: 'cancel-transaction',
-    },
-    {
       title: t('dashboard.salesReturn'),
+      description: t('dashboard.salesReturn'),
       icon: RotateCcw,
       color: colors.amber,
       bgColor: 'bg-amber-500/10 dark:bg-amber-400/20',
       route: 'SalesReturn',
       permission: 'sales-return-list',
     },
-    {
-      title: t('dashboard.debtPayments'),
-      icon: Wallet,
-      color: colors.indigo,
-      bgColor: 'bg-indigo-500/10 dark:bg-indigo-400/20',
-      route: 'DebtPayments',
-      permission: 'payment-ap-list',
-    },
-    {
-      title: t('sales.creditPayments'),
-      icon: CreditCard,
-      color: colors.primary,
-      bgColor: 'bg-primary/10 dark:bg-primary/20',
-      route: 'CreditPayments',
-      permission: 'payment-ar-list',
-    },
   ].filter(item => !item.permission || hasPermission(item.permission));
 
+  const isLoading = loadingApprovals;
+
   return (
-    <AppLayout title={t('sales.title')}>
-      <ScrollView className="flex-1 px-4 pt-4">
-        <View className="flex-row flex-wrap justify-between">
-          {menuItems.map((item, index) => (
+    <View
+      className="flex-1 bg-background"
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
+    >
+      <View className="bg-card border-b border-border shadow-sm">
+        <View className="flex-row items-center justify-between px-6 py-4">
+          <Text className="text-2xl font-black text-foreground tracking-tighter">
+            {t('sales.title')}
+          </Text>
+          <TouchableOpacity
+            onPress={onRefresh}
+            className="p-2 bg-secondary/20 rounded-full"
+          >
+            <RotateCcw size={20} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView
+        className="flex-1 px-4 pt-4"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+      >
+        {fetchError && (!pendingApprovals || pendingApprovals.length === 0) ? (
+          <ConnectionError onRetry={onRefresh} message={fetchError} />
+        ) : (
+          <>
+            {/* Short Summary Card */}
             <Pressable
-              key={index}
-              className="w-[48%] mb-4 active:opacity-80"
-              onPress={() => navigation.navigate(item.route)}
+              className="mb-8"
+              onPress={() => navigation.navigate('SalesApprove')}
             >
-              <View className="rounded-2xl border border-border/60 bg-card shadow-sm items-center justify-center p-6 h-[160px]">
-                <View
-                  className={cn(
-                    'w-14 h-14 rounded-2xl items-center justify-center mb-4',
-                    item.bgColor,
-                  )}
-                >
-                  <item.icon size={28} color={item.color} />
+              <View className="p-4 rounded-3xl border border-green-500/30 bg-green-500/5">
+                <View className="flex-row items-center justify-between">
+                  <View>
+                    <View className="p-2 rounded-2xl bg-green-500/10 w-10 h-10 items-center justify-center mb-3">
+                      <ClipboardCheck size={20} color={colors.green} />
+                    </View>
+                    <Text className="text-2xl font-black text-foreground tracking-tight">
+                      {numberWithComma(totalPendingAmount)}
+                    </Text>
+                    <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">
+                      {totalPendingInvoices} Invoices Pending Approval
+                    </Text>
+                  </View>
+                  <View className="bg-green-500/10 p-3 rounded-2xl">
+                    <ArrowRight size={20} color={colors.green} />
+                  </View>
                 </View>
-                <Text className="text-center font-bold text-foreground text-sm leading-5">
-                  {item.title}
-                </Text>
               </View>
             </Pressable>
-          ))}
-        </View>
+
+            <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
+              Sales Operations MENU
+            </Text>
+
+            <View className="flex-row flex-wrap justify-between">
+              {menuItems.map((item, index) => (
+                <Pressable
+                  key={index}
+                  className="w-[48%] mb-4 active:scale-95"
+                  onPress={() => navigation.navigate(item.route)}
+                >
+                  <View className="rounded-3xl border border-border/60 bg-card shadow-sm p-5 h-[140px] justify-between">
+                    <View
+                      className={cn(
+                        'w-12 h-12 rounded-2xl items-center justify-center',
+                        item.bgColor,
+                      )}
+                    >
+                      <item.icon size={24} color={item.color} />
+                    </View>
+                    <View>
+                      <Text
+                        className="font-black text-foreground text-[11px] leading-4 tracking-wider"
+                        numberOfLines={2}
+                      >
+                        {item.title}
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        )}
       </ScrollView>
-    </AppLayout>
+      <Loading isLoading={isLoading} />
+    </View>
   );
 }

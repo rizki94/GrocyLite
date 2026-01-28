@@ -3,32 +3,20 @@ import {
   View,
   Text,
   FlatList,
-  RefreshControl,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeColor } from '../../lib/colors';
-import { AppLayout } from '../../components/layout/app-layout';
 import { Card, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
-import {
-  Search,
-  Package2,
-  Filter,
-  ArrowUpAZ,
-  ArrowLeft,
-  RotateCcw,
-} from 'lucide-react-native';
+import { Search, Package2, ArrowLeft, RotateCcw } from 'lucide-react-native';
 import { useConnection } from '../../hooks/use-connection';
 import { numberWithComma } from '../../utils/helpers';
 import { useTranslation } from 'react-i18next';
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
-import { cn } from '../../lib/utils';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Loading } from '../../components/ui/loading';
-import { ActivityIndicator } from 'react-native';
+import { ConnectionError } from '../../components/connection-error';
 
 interface ProductStockItem {
   Name: string;
@@ -60,6 +48,7 @@ export function ProductsScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchProducts = async (
     pageNum: number,
@@ -79,8 +68,10 @@ export function ProductsScreen() {
         setProducts(prev => [...prev, ...newData]);
       }
       setHasMore(newData.length === 10);
-    } catch (error) {
+      setFetchError(null);
+    } catch (error: any) {
       console.error('Fetch products error:', error);
+      setFetchError(error.message || 'Network Error');
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -243,37 +234,46 @@ export function ProductsScreen() {
       </View>
 
       <View className="flex-1">
-        <FlatList
-          data={processedProducts}
-          keyExtractor={(item, index) => `${item.id}-${index}`}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
-          showsVerticalScrollIndicator={false}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            isLoading && page > 1 ? (
-              <View className="py-4">
-                <ActivityIndicator color={colors.primary} />
-              </View>
-            ) : null
-          }
-          ListEmptyComponent={
-            !isLoading ? (
-              <View className="items-center justify-center py-20">
-                <Package2
-                  size={48}
-                  color={colors.mutedForeground}
-                  style={{ opacity: 0.3 }}
-                />
-                <Text className="text-muted-foreground">
-                  {t('inventory.noProducts')}
-                </Text>
-              </View>
-            ) : null
-          }
-        />
-        {isLoading && page === 1 && <Loading isLoading={isLoading} />}
+        {fetchError && products.length === 0 ? (
+          <ConnectionError onRetry={onRefresh} message={fetchError} />
+        ) : (
+          <FlatList
+            data={processedProducts}
+            keyExtractor={(item, index) => `${item.id}-${index}`}
+            renderItem={renderItem}
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingBottom: 100,
+            }}
+            showsVerticalScrollIndicator={false}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              isLoading && page > 1 ? (
+                <View className="py-4">
+                  <ActivityIndicator color={colors.primary} />
+                </View>
+              ) : null
+            }
+            ListEmptyComponent={
+              !isLoading ? (
+                <View className="items-center justify-center py-20">
+                  <Package2
+                    size={48}
+                    color={colors.mutedForeground}
+                    style={{ opacity: 0.3 }}
+                  />
+                  <Text className="text-muted-foreground">
+                    {t('inventory.noProducts')}
+                  </Text>
+                </View>
+              ) : null
+            }
+          />
+        )}
+        {isLoading && page === 1 && products.length === 0 && (
+          <Loading isLoading={isLoading} />
+        )}
       </View>
     </View>
   );

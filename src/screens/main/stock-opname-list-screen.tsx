@@ -7,13 +7,11 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
-import { AppLayout } from '../../components/layout/app-layout';
 import { Card } from '../../components/ui/card';
 import {
   FileText,
   ChevronRight,
   Plus,
-  X,
   RotateCcw,
   ArrowLeft,
 } from 'lucide-react-native';
@@ -22,6 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useConnection } from '../../hooks/use-connection';
 import { DatePicker } from '../../components/ui/date-picker';
 import { Loading } from '../../components/ui/loading';
+import { ConnectionError } from '../../components/connection-error';
 import moment from 'moment';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -44,14 +43,13 @@ export function StockOpnameListScreen() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Date range filter - default to current month
   const [startDate, setStartDate] = useState<Date>(
     moment().startOf('month').toDate(),
   );
   const [endDate, setEndDate] = useState<Date>(new Date());
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
 
   const fetchStockOpnames = useCallback(
     async (page: number = 1, isRefresh: boolean = false) => {
@@ -90,8 +88,10 @@ export function StockOpnameListScreen() {
 
         setHasMore(response.data.current_page < response.data.last_page);
         setCurrentPage(response.data.current_page);
-      } catch (error) {
+        setFetchError(null);
+      } catch (error: any) {
         console.error('Failed to fetch stock opnames', error);
+        setFetchError(error.message || 'Network Error');
       } finally {
         setIsLoading(false);
         setRefreshing(false);
@@ -103,19 +103,15 @@ export function StockOpnameListScreen() {
 
   useEffect(() => {
     fetchStockOpnames(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Refetch when date range changes
   useEffect(() => {
     if (startDate && endDate) {
-      // Trigger fetch if both dates are set
       setCurrentPage(1);
       setHasMore(true);
       fetchStockOpnames(1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate]); // Removed fetchStockOpnames to prevent infinite loop
+  }, [startDate, endDate]);
 
   const onRefresh = useCallback(() => {
     setCurrentPage(1);
@@ -128,6 +124,7 @@ export function StockOpnameListScreen() {
       fetchStockOpnames(currentPage + 1);
     }
   }, [currentPage, hasMore, isLoadingMore, isLoading, fetchStockOpnames]);
+
   const renderItem = ({ item }: { item: StockOpnameItem }) => (
     <Card className="overflow-hidden mb-3 border border-border bg-card">
       <Pressable
@@ -220,49 +217,56 @@ export function StockOpnameListScreen() {
         </View>
       </View>
 
-      {/* Loading Overlay */}
-      {isLoading && <Loading isLoading={isLoading} />}
-
       {/* List */}
-      {!isLoading && (
-        <FlatList
-          data={stockOpnames}
-          keyExtractor={(item, index) => item.invoice || index.toString()}
-          renderItem={renderItem}
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingTop: 16,
-            paddingBottom: insets.bottom + 100,
-          }}
-          showsVerticalScrollIndicator={false}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={renderFooter}
-          ListEmptyComponent={
-            <View className="items-center justify-center py-20">
-              <FileText
-                size={48}
-                color={colors.mutedForeground}
-                style={{ opacity: 0.3 }}
-              />
-              <Text className="text-muted-foreground mt-4">
-                {t('warehouse.stockOpname.noRecordsFound')}
-              </Text>
-            </View>
-          }
-        />
-      )}
+      <View className="flex-1">
+        {fetchError && stockOpnames.length === 0 ? (
+          <ConnectionError onRetry={onRefresh} message={fetchError} />
+        ) : (
+          <FlatList
+            data={stockOpnames}
+            keyExtractor={(item, index) => item.invoice || index.toString()}
+            renderItem={renderItem}
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingTop: 16,
+              paddingBottom: insets.bottom + 100,
+            }}
+            showsVerticalScrollIndicator={false}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={renderFooter}
+            ListEmptyComponent={
+              !isLoading ? (
+                <View className="items-center justify-center py-20">
+                  <FileText
+                    size={48}
+                    color={colors.mutedForeground}
+                    style={{ opacity: 0.3 }}
+                  />
+                  <Text className="text-muted-foreground mt-4">
+                    {t('warehouse.stockOpname.noRecordsFound')}
+                  </Text>
+                </View>
+              ) : null
+            }
+          />
+        )}
+      </View>
+
+      <Loading isLoading={isLoading && stockOpnames.length === 0} />
 
       {/* Floating Add Button */}
-      <Pressable
-        className="absolute right-6 w-14 h-14 bg-primary rounded-full items-center justify-center shadow-lg active:scale-95"
-        style={{ elevation: 8, bottom: insets.bottom + 24 }}
-        onPress={() => {
-          navigation.navigate('StockOpnameDetail', { invoice: 0 });
-        }}
-      >
-        <Plus size={28} color="#ffffff" />
-      </Pressable>
+      {!fetchError && (
+        <Pressable
+          className="absolute right-6 w-14 h-14 bg-primary rounded-full items-center justify-center shadow-lg active:scale-95"
+          style={{ elevation: 8, bottom: insets.bottom + 24 }}
+          onPress={() => {
+            navigation.navigate('StockOpnameDetail', { invoice: 0 });
+          }}
+        >
+          <Plus size={28} color="#ffffff" />
+        </Pressable>
+      )}
     </View>
   );
 }

@@ -26,6 +26,7 @@ import { Card } from '../../components/ui/card';
 import { DatePicker } from '../../components/ui/date-picker';
 import { Input } from '../../components/ui/input';
 import { Loading } from '../../components/ui/loading';
+import { ConnectionError } from '../../components/connection-error';
 import { useTranslation } from 'react-i18next';
 interface SalesApproveItem {
   CompanyName: string;
@@ -42,7 +43,11 @@ export function SalesApproveScreen({ navigation }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data: salesList, isLoading } = useFetchWithParams(
+  const {
+    data: salesList,
+    isLoading,
+    fetchError,
+  } = useFetchWithParams(
     'api/bridge/approve_list',
     {
       params: {
@@ -308,19 +313,23 @@ export function SalesApproveScreen({ navigation }: any) {
           />
         </View>
 
-        <FlatList
-          data={groupedList}
-          renderItem={renderItem}
-          keyExtractor={item => item.CompanyName}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View className="py-20 items-center">
-              <Text className="text-muted-foreground">
-                {t('general.resultNotAvailable')}
-              </Text>
-            </View>
-          }
-        />
+        {fetchError && groupedList.length === 0 ? (
+          <ConnectionError onRetry={onRefresh} message={fetchError} />
+        ) : (
+          <FlatList
+            data={groupedList}
+            renderItem={renderItem}
+            keyExtractor={item => item.CompanyName}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View className="py-20 items-center">
+                <Text className="text-muted-foreground">
+                  {t('general.resultNotAvailable')}
+                </Text>
+              </View>
+            }
+          />
+        )}
 
         <Loading isLoading={isLoading} />
       </View>

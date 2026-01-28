@@ -1,21 +1,24 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, FlatList, RefreshControl } from 'react-native';
-import { AppLayout } from '../../components/layout/app-layout';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { useFetchWithParams } from '../../hooks/use-fetch';
 import { dateFormatted, numberWithComma } from '../../utils/helpers';
 import { cn } from '../../lib/utils';
-import { Card } from '../../components/ui/card';
 import { useThemeColor } from '../../lib/colors';
 import { useTranslation } from 'react-i18next';
 import { DatePicker } from '../../components/ui/date-picker';
 import { Loading } from '../../components/ui/loading';
-import { Search, Users } from 'lucide-react-native';
+import { ConnectionError } from '../../components/connection-error';
+import { Search, Users, ArrowLeft, RotateCcw } from 'lucide-react-native';
 import { Input } from '../../components/ui/input';
 import { useDebounce } from '../../hooks/use-debounce';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 
 export function SalesReportScreen() {
   const { t } = useTranslation();
   const colors = useThemeColor();
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
@@ -23,17 +26,30 @@ export function SalesReportScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 500);
 
-  const filters = {
-    startDate: dateFormatted(startDate),
-    endDate: dateFormatted(endDate),
-    search: debouncedSearch,
-  };
+  const filters = useMemo(
+    () => ({
+      startDate: dateFormatted(startDate),
+      endDate: dateFormatted(endDate),
+      search: debouncedSearch,
+    }),
+    [startDate, endDate, debouncedSearch],
+  );
 
-  const { data: omzetData, isLoading } = useFetchWithParams(
+  const {
+    data: omzetData,
+    isLoading,
+    fetchError,
+  } = useFetchWithParams(
     'api/bridge/omzet_sales',
     { params: filters },
     filters,
+    refreshing,
   );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1000);
+  }, []);
 
   // Transform the object response from api/bridge/omzet_sales into an array
   const omzet = useMemo(() => {
@@ -48,7 +64,7 @@ export function SalesReportScreen() {
   );
 
   const renderItem = ({ item }: { item: any }) => (
-    <View className="mb-4 mx-1 p-4 rounded-2xl border border-border/60 bg-card shadow-sm">
+    <View className="mb-4 mx-4 p-4 rounded-2xl border border-border/60 bg-card shadow-sm">
       <View className="flex-row justify-between items-center">
         <View className="flex-1 flex-row items-center mr-4">
           <View className="p-2 rounded-xl bg-primary/10 mr-3">
@@ -69,62 +85,93 @@ export function SalesReportScreen() {
   );
 
   return (
-    <AppLayout title={t('sales.omzetReport')} showBack>
-      <View className="px-4 mb-6">
-        <View className="flex-row gap-3 mb-4">
-          <View className="flex-1">
-            <DatePicker
-              label={t('general.from')}
-              value={startDate}
-              onChange={setStartDate}
-            />
+    <View
+      className="flex-1 bg-background"
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
+    >
+      <View className="bg-card border-b border-border shadow-sm">
+        <View className="flex-row items-center justify-between px-4 py-3">
+          <View className="flex-row items-center">
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              className="p-2 -ml-2 rounded-full"
+            >
+              <ArrowLeft size={24} color={colors.foreground} />
+            </TouchableOpacity>
+            <Text className="text-xl font-bold text-foreground ml-2">
+              {t('sales.omzetReport')}
+            </Text>
           </View>
-          <View className="flex-1">
-            <DatePicker
-              label={t('general.to')}
-              value={endDate}
-              onChange={setEndDate}
-            />
-          </View>
+          <TouchableOpacity onPress={onRefresh} className="p-2 rounded-full">
+            <RotateCcw size={20} color={colors.foreground} />
+          </TouchableOpacity>
         </View>
 
-        <View className="p-6 rounded-2xl bg-primary/5 border border-primary/30 items-center mb-6">
-          <Text className="text-muted-foreground text-[10px] uppercase font-bold tracking-[2px] mb-2">
-            {t('sales.grandTotal')}
-          </Text>
-          <Text className="font-black text-4xl text-primary">
-            {numberWithComma(grandTotal)}
-          </Text>
-        </View>
-
-        {/* Search Input */}
-        <View className="relative">
-          <View className="absolute left-3 top-3 z-10">
-            <Search size={18} color={colors.mutedForeground} />
+        <View className="px-4 pb-4">
+          <View className="flex-row gap-3 mb-4">
+            <View className="flex-1">
+              <DatePicker
+                label={t('general.from')}
+                value={startDate}
+                onChange={setStartDate}
+              />
+            </View>
+            <View className="flex-1">
+              <DatePicker
+                label={t('general.to')}
+                value={endDate}
+                onChange={setEndDate}
+              />
+            </View>
           </View>
-          <Input
-            placeholder={t('general.search')}
-            className="pl-10 h-12 bg-secondary/10 border border-border/50 rounded-xl"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+
+          <View className="p-6 rounded-2xl bg-primary/5 border border-primary/30 items-center mb-6">
+            <Text className="text-muted-foreground text-[10px] uppercase font-bold tracking-[2px] mb-2">
+              {t('sales.grandTotal')}
+            </Text>
+            <Text className="font-black text-4xl text-primary">
+              {numberWithComma(grandTotal)}
+            </Text>
+          </View>
+
+          {/* Search Input */}
+          <View className="relative">
+            <View className="absolute left-3 top-3 z-10">
+              <Search size={18} color={colors.mutedForeground} />
+            </View>
+            <Input
+              placeholder={t('general.search')}
+              className="pl-10 h-12 bg-secondary/10 border border-border/50 rounded-xl font-bold text-xs"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
         </View>
       </View>
 
       <FlatList
-        data={omzet}
+        className="flex-1 pt-4"
+        data={fetchError && omzet.length === 0 ? [] : omzet}
         renderItem={renderItem}
         keyExtractor={(item, index) => index.toString()}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
         ListEmptyComponent={
-          !isLoading ? (
-            <Text className="text-center mt-10 text-muted-foreground">
-              {t('general.noData')}
-            </Text>
+          fetchError && omzet.length === 0 ? (
+            <ConnectionError onRetry={onRefresh} message={fetchError} />
+          ) : !isLoading ? (
+            <View className="flex-1 items-center justify-center pt-20">
+              <Text className="text-center text-muted-foreground font-bold uppercase text-[10px] tracking-widest">
+                {t('general.noData')}
+              </Text>
+            </View>
           ) : null
         }
       />
-      {isLoading && <Loading isLoading={isLoading} />}
-    </AppLayout>
+      <Loading isLoading={isLoading} />
+    </View>
   );
 }

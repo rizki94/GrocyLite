@@ -1,64 +1,81 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   ScrollView,
-  RefreshControl,
   Pressable,
+  TouchableOpacity,
 } from 'react-native';
-import { AppLayout } from '../../components/layout/app-layout';
-import { Card, CardContent } from '../../components/ui/card';
 import { useFetchWithParams, useFetch } from '../../hooks/use-fetch';
 import { dateFormatted, numberWithComma } from '../../utils/helpers';
 import { cn } from '../../lib/utils';
 import {
   Package,
   TrendingUp,
-  AlertTriangle,
   ArrowRight,
-  Plus,
-  Layers,
   BarChart3,
-  Calendar,
   MapPin,
+  RotateCcw,
+  Ban,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import moment from 'moment';
 import { DatePicker } from '../../components/ui/date-picker';
 import { useThemeColor } from '../../lib/colors';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Loading } from '../../components/ui/loading';
+import { ConnectionError } from '../../components/connection-error';
+import { usePermissions } from '../../hooks/use-permissions';
 
 export function HomeScreen() {
   const { t } = useTranslation();
+  const { hasPermission } = usePermissions();
   const navigation = useNavigation<any>();
   const colors = useThemeColor();
+  const insets = useSafeAreaInsets();
   const [date, setDate] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data: dashboardOmzet, isLoading: loadingOmzet } = useFetchWithParams(
+  const {
+    data: dashboardOmzet,
+    isLoading: loadingOmzet,
+    fetchError: errorOmzet,
+  } = useFetchWithParams(
     'api/bridge/dashboard_omzet_mobile',
     { params: { date: dateFormatted(date) } },
-    date,
+    [date],
     refreshing,
   );
 
-  const { data: dashboardStock, isLoading: loadingStock } = useFetch(
-    'api/bridge/dashboard_stock',
+  const {
+    data: dashboardStock,
+    isLoading: loadingStock,
+    fetchError: errorStock,
+  } = useFetch('api/bridge/dashboard_stock', refreshing);
+
+  const {
+    data: dashboardPurchase,
+    isLoading: loadingPurchase,
+    fetchError: errorPurchase,
+  } = useFetchWithParams(
+    'api/bridge/dashboard_purchase',
+    { params: { date: dateFormatted(date) } },
+    [date],
     refreshing,
   );
 
-  const { data: dashboardPurchase, isLoading: loadingPurchase } =
-    useFetchWithParams(
-      'api/bridge/dashboard_purchase',
-      { params: { date: dateFormatted(date) } },
-      date,
-      refreshing,
-    );
-
-  const onRefresh = React.useCallback(() => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 2000);
+    setTimeout(() => setRefreshing(false), 1000);
   }, []);
+
+  const isLoading = loadingOmzet || loadingStock || loadingPurchase;
+  const fetchError = errorOmzet || errorStock || errorPurchase;
+
+  const hasNoData =
+    (!dashboardOmzet || dashboardOmzet.length === 0) &&
+    (!dashboardStock || dashboardStock.length === 0) &&
+    (!dashboardPurchase || dashboardPurchase.length === 0);
 
   const getOmzetStats = () => {
     let today = 0;
@@ -98,150 +115,175 @@ export function HomeScreen() {
     : 0;
 
   return (
-    <AppLayout title={t('dashboard.home')}>
+    <View
+      className="flex-1 bg-background"
+      style={{
+        paddingTop: insets.top,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
+    >
+      <View className="bg-card border-b border-border shadow-sm">
+        <View className="flex-row items-center justify-between px-6 py-4">
+          <Text className="text-2xl font-black text-foreground tracking-tighter">
+            {t('dashboard.home')}
+          </Text>
+          <TouchableOpacity
+            onPress={onRefresh}
+            className="p-2 bg-secondary/20 rounded-full"
+          >
+            <RotateCcw size={20} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
-        className="flex-1"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#10b981"
-          />
-        }
+        className="flex-1 px-4 pt-4"
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
       >
         {/* Date Selector */}
         <View className="mb-6">
           <DatePicker value={date} onChange={setDate} />
         </View>
 
-        {/* Stats Grid */}
-        <View className="flex-row flex-wrap justify-between mb-8">
-          <Pressable
-            className="w-[48%] mb-4"
-            onPress={() => navigation.navigate('SalesReport' as never)}
-          >
-            <View className="p-4 rounded-2xl border border-primary/30 bg-primary/5">
-              <View className="p-2 rounded-xl bg-primary/10 w-10 h-10 items-center justify-center mb-3">
-                <TrendingUp size={20} color={colors.primary} />
-              </View>
-              <Text className="text-xl font-black text-foreground">
-                {numberWithComma(omzetStats.today)}
-              </Text>
-              <Text className="text-[10px] text-muted-foreground font-extrabold uppercase mt-1">
-                {t('dashboard.todayOmzet')}
-              </Text>
-              <Text
-                className={cn(
-                  'text-[10px] mt-2 font-bold',
-                  omzetStats.percentage >= 0
-                    ? 'text-emerald-500'
-                    : 'text-destructive',
-                )}
+        {fetchError && hasNoData ? (
+          <ConnectionError onRetry={onRefresh} message={fetchError} />
+        ) : (
+          <>
+            {/* Stats Grid */}
+            <View className="flex-row flex-wrap justify-between mb-8">
+              <Pressable
+                className="w-[48%] mb-4"
+                onPress={() => navigation.navigate('SalesReport' as never)}
               >
-                {omzetStats.percentage >= 0 ? '+' : ''}
-                {omzetStats.percentage.toFixed(1)}% vs {t('general.lastWeek')}
-              </Text>
-            </View>
-          </Pressable>
-
-          <Pressable
-            className="w-[48%] mb-4"
-            onPress={() => navigation.navigate('Warehouse' as never)}
-          >
-            <View className="p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5">
-              <View className="p-2 rounded-xl bg-amber-500/10 w-10 h-10 items-center justify-center mb-3">
-                <Package size={20} color={colors.amber} />
-              </View>
-              <Text className="text-xl font-black text-foreground">
-                {numberWithComma(stockTotal)}
-              </Text>
-              <Text className="text-[10px] text-muted-foreground font-extrabold uppercase mt-1">
-                {t('dashboard.totalStock')}
-              </Text>
-            </View>
-          </Pressable>
-
-          <Pressable
-            className="w-[100%]"
-            onPress={() => navigation.navigate('Purchase' as never)}
-          >
-            <View className="p-4 rounded-2xl border border-blue-500/30 bg-blue-500/5">
-              <View className="flex-row items-center justify-between">
-                <View>
-                  <View className="p-2 rounded-xl bg-blue-500/10 w-10 h-10 items-center justify-center mb-3">
-                    <BarChart3 size={20} color={colors.blue} />
+                <View className="p-4 rounded-3xl border border-primary/30 bg-primary/5">
+                  <View className="p-2 rounded-2xl bg-primary/10 w-10 h-10 items-center justify-center mb-3">
+                    <TrendingUp size={20} color={colors.primary} />
                   </View>
-                  <Text className="text-xl font-black text-foreground">
-                    {numberWithComma(purchaseTotal)}
+                  <Text className="text-xl font-black text-foreground tracking-tight">
+                    {numberWithComma(omzetStats.today)}
                   </Text>
-                  <Text className="text-[10px] text-muted-foreground font-extrabold uppercase mt-1">
-                    {t('dashboard.totalPurchasing')}
+                  <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">
+                    {t('dashboard.todayOmzet')}
+                  </Text>
+                  <View
+                    className={cn(
+                      'mt-3 px-2 py-1 rounded-lg self-start',
+                      omzetStats.percentage >= 0
+                        ? 'bg-emerald-500/10'
+                        : 'bg-destructive/10',
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        'text-[10px] font-black',
+                        omzetStats.percentage >= 0
+                          ? 'text-emerald-500'
+                          : 'text-destructive',
+                      )}
+                    >
+                      {omzetStats.percentage >= 0 ? '+' : ''}
+                      {omzetStats.percentage.toFixed(1)}%
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
+
+              <Pressable className="w-[48%] mb-4">
+                <View className="p-4 rounded-3xl border border-amber-500/30 bg-amber-500/5">
+                  <View className="p-2 rounded-2xl bg-amber-500/10 w-10 h-10 items-center justify-center mb-3">
+                    <Package size={20} color={colors.amber} />
+                  </View>
+                  <Text className="text-xl font-black text-foreground tracking-tight">
+                    {numberWithComma(stockTotal)}
+                  </Text>
+                  <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">
+                    {t('dashboard.totalStock')}
                   </Text>
                 </View>
-                <ArrowRight
-                  size={24}
-                  color={colors.blue}
-                  style={{ opacity: 0.3 }}
-                />
-              </View>
+              </Pressable>
+
+              {hasPermission('purchase-report') && (
+                <Pressable
+                  className="w-[100%]"
+                  onPress={() => navigation.navigate('Purchase' as never)}
+                >
+                  <View className="p-4 rounded-3xl border border-blue-500/30 bg-blue-500/5">
+                    <View className="flex-row items-center justify-between">
+                      <View>
+                        <View className="p-2 rounded-2xl bg-blue-500/10 w-10 h-10 items-center justify-center mb-3">
+                          <BarChart3 size={20} color={colors.blue} />
+                        </View>
+                        <Text className="text-2xl font-black text-foreground tracking-tight">
+                          {numberWithComma(purchaseTotal)}
+                        </Text>
+                        <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">
+                          {t('dashboard.totalPurchasing')}
+                        </Text>
+                      </View>
+                      <View className="bg-blue-500/10 p-3 rounded-2xl">
+                        <ArrowRight size={20} color={colors.blue} />
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              )}
             </View>
-          </Pressable>
-        </View>
 
-        {/* Quick Actions */}
-        <Text className="text-lg font-bold text-foreground mb-4">
-          {t('dashboard.quickActions')}
-        </Text>
-        <View className="flex-row gap-4 mb-4">
-          <Pressable
-            onPress={() => navigation.navigate('Attendance' as never)}
-            className="flex-1 bg-primary p-4 rounded-2xl items-center justify-center shadow-lg active:opacity-80"
-          >
-            <MapPin size={24} color={colors.primaryForeground} />
-            <Text className="text-primary-foreground font-medium">
-              {t('dashboard.attendance')}
+            {/* Quick Actions */}
+            <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
+              {t('dashboard.quickActions')}
             </Text>
-          </Pressable>
-        </View>
-        {/* <View className="flex-row gap-4 mb-8">
-          <Pressable className="flex-1 bg-primary p-4 rounded-2xl items-center justify-center shadow-lg active:opacity-80">
-            <Plus size={24} color="#ffffff" />
-            <Text className="text-primary-foreground font-medium">
-              {t('dashboard.addStock')}
-            </Text>
-          </Pressable>
-          <Pressable className="flex-1 bg-card border border-border p-4 rounded-2xl items-center justify-center active:opacity-80">
-            <Layers size={24} color={colors.foreground} />
-            <Text className="text-foreground font-medium">
-              {t('dashboard.scanQr')}
-            </Text>
-          </Pressable>
-        </View> */}
+            <View className="flex-row gap-4 mb-8">
+              <Pressable
+                onPress={() => navigation.navigate('Attendance' as never)}
+                className="flex-1 bg-primary p-5 rounded-3xl items-center flex-row justify-center shadow-lg shadow-primary/30 active:opacity-90"
+              >
+                <MapPin size={20} color={colors.primaryForeground} />
+                <Text className="text-primary-foreground font-black uppercase tracking-widest ml-3 text-xs">
+                  {t('dashboard.attendance')}
+                </Text>
+              </Pressable>
+            </View>
 
-        {/* Stock Breakdown (if exists) */}
-        {Array.isArray(dashboardStock) && dashboardStock.length > 0 && (
-          <>
-            <Text className="text-lg font-bold text-foreground mb-4">
-              {t('dashboard.stockBreakdown')}
-            </Text>
+            {/* Management Actions */}
+            {hasPermission('cancel-transaction') && (
+              <View className="mb-8">
+                <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
+                  Management
+                </Text>
+                <Pressable
+                  onPress={() =>
+                    navigation.navigate('CancelTransaction' as never)
+                  }
+                  className="bg-card border border-border p-5 rounded-3xl items-center flex-row justify-center active:bg-secondary/20 shadow-sm"
+                >
+                  <Ban size={20} color={colors.destructive} />
+                  <Text className="text-destructive font-black uppercase tracking-widest ml-3 text-xs">
+                    {t('cancelTransaction.title')}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
             {/* Stock Breakdown */}
             {Array.isArray(dashboardStock) && dashboardStock.length > 0 && (
               <View className="mb-10">
-                <Text className="text-lg font-bold text-foreground mb-4">
+                <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
                   {t('dashboard.stockBreakdown')}
                 </Text>
-                <View className="bg-secondary/10 rounded-2xl border border-border/50 p-4">
+                <View className="bg-card rounded-3xl border border-border/50 p-2 shadow-sm">
                   {dashboardStock.map((item: any, i: number) => (
                     <View
                       key={i}
                       className={cn(
-                        'flex-row items-center justify-between py-4',
+                        'flex-row items-center justify-between p-4',
                         i !== dashboardStock.length - 1 &&
-                          'border-b border-border/30',
+                          'border-b border-border/10',
                       )}
                     >
-                      <Text className="font-extrabold text-foreground uppercase text-xs">
+                      <Text className="font-extrabold text-foreground uppercase text-[10px] tracking-widest">
                         {item.Source}
                       </Text>
                       <Text className="font-black text-primary text-base">
@@ -255,6 +297,7 @@ export function HomeScreen() {
           </>
         )}
       </ScrollView>
-    </AppLayout>
+      <Loading isLoading={isLoading} />
+    </View>
   );
 }
