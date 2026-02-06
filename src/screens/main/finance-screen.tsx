@@ -32,35 +32,10 @@ export function FinanceScreen() {
   const { hasPermission } = usePermissions();
   const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch AR Summary
-  const {
-    data: arSummary,
-    isLoading: loadingAr,
-    fetchError: errorAr,
-  } = useFetch('api/bridge/dashboard_credit_payment', refreshing);
-
-  // Fetch AP Summary
-  const {
-    data: apSummary,
-    isLoading: loadingAp,
-    fetchError: errorAp,
-  } = useFetch('api/bridge/dashboard_debt_payment', refreshing);
-
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
-
-  const totalArBalance = Array.isArray(arSummary)
-    ? arSummary.reduce(
-        (acc: number, curr: any) => acc + Number(curr.balance),
-        0,
-      )
-    : 0;
-
-  const totalApBalance = Array.isArray(apSummary)
-    ? apSummary.reduce((acc: number, curr: any) => acc + Number(curr.Total), 0)
-    : 0;
 
   const menuItems = [
     {
@@ -92,12 +67,10 @@ export function FinanceScreen() {
     },
   ].filter(item => !item.permission || hasPermission(item.permission));
 
-  const isLoading = loadingAr || loadingAp;
-  const fetchError = errorAr || errorAp;
+  const isLoading = false;
+  const fetchError = null;
 
-  const hasNoData =
-    (!arSummary || arSummary.length === 0) &&
-    (!apSummary || apSummary.length === 0);
+  const hasNoData = true;
 
   return (
     <View
@@ -131,43 +104,6 @@ export function FinanceScreen() {
           <ConnectionError onRetry={onRefresh} message={fetchError} />
         ) : (
           <>
-            {/* Summary Row */}
-            <View className="flex-row gap-4 mb-8">
-              <Pressable
-                className="flex-1"
-                onPress={() => navigation.navigate('CreditPayments')}
-              >
-                <View className="p-4 rounded-3xl border border-primary/30 bg-primary/5">
-                  <View className="p-2 rounded-2xl bg-primary/10 w-10 h-10 items-center justify-center mb-3">
-                    <CreditCard size={20} color={colors.primary} />
-                  </View>
-                  <Text className="text-xl font-black text-foreground tracking-tight">
-                    {numberWithComma(totalArBalance)}
-                  </Text>
-                  <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">
-                    Total AR
-                  </Text>
-                </View>
-              </Pressable>
-
-              <Pressable
-                className="flex-1"
-                onPress={() => navigation.navigate('DebtPayments')}
-              >
-                <View className="p-4 rounded-3xl border border-indigo-500/30 bg-indigo-500/5">
-                  <View className="p-2 rounded-2xl bg-indigo-500/10 w-10 h-10 items-center justify-center mb-3">
-                    <Wallet size={20} color={colors.indigo} />
-                  </View>
-                  <Text className="text-xl font-black text-foreground tracking-tight">
-                    {numberWithComma(totalApBalance)}
-                  </Text>
-                  <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">
-                    Total AP
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
-
             <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
               {t('finance.title')} Menu
             </Text>

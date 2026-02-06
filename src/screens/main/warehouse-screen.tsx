@@ -26,23 +26,10 @@ export function WarehouseScreen() {
   const { hasPermission } = usePermissions();
   const [refreshing, setRefreshing] = useState(false);
 
-  const {
-    data: dashboardStock,
-    isLoading: loadingStock,
-    fetchError,
-  } = useFetch('api/bridge/dashboard_stock', refreshing);
-
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
-
-  const totalStock = Array.isArray(dashboardStock)
-    ? dashboardStock.reduce(
-        (prev: number, cur: any) => prev + Number(cur.Amount),
-        0,
-      )
-    : 0;
 
   const menuItems = [
     {
@@ -91,35 +78,10 @@ export function WarehouseScreen() {
         className="flex-1 px-4 pt-4"
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
       >
-        {fetchError && (!dashboardStock || dashboardStock.length === 0) ? (
-          <ConnectionError onRetry={onRefresh} message={fetchError} />
+        {false ? (
+          <ConnectionError onRetry={onRefresh} message={''} />
         ) : (
           <>
-            {/* Summary Card */}
-            <Pressable
-              className="mb-8"
-              onPress={() => navigation.navigate('Products')}
-            >
-              <View className="p-4 rounded-3xl border border-amber-500/30 bg-amber-500/5">
-                <View className="flex-row items-center justify-between">
-                  <View>
-                    <View className="p-2 rounded-2xl bg-amber-500/10 w-10 h-10 items-center justify-center mb-3">
-                      <Package size={20} color={colors.amber} />
-                    </View>
-                    <Text className="text-2xl font-black text-foreground tracking-tight">
-                      {numberWithComma(totalStock)}
-                    </Text>
-                    <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">
-                      {t('dashboard.totalStock')}
-                    </Text>
-                  </View>
-                  <View className="bg-amber-500/10 p-3 rounded-2xl">
-                    <ArrowRight size={20} color={colors.amber} />
-                  </View>
-                </View>
-              </View>
-            </Pressable>
-
             <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
               {t('warehouse.title')} Menu
             </Text>
@@ -152,38 +114,10 @@ export function WarehouseScreen() {
                 </Pressable>
               ))}
             </View>
-
-            {/* Stock Breakdown */}
-            {Array.isArray(dashboardStock) && dashboardStock.length > 0 && (
-              <View className="mt-4">
-                <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
-                  {t('dashboard.stockBreakdown')}
-                </Text>
-                <View className="bg-card rounded-3xl border border-border/50 p-2 shadow-sm">
-                  {dashboardStock.map((item: any, i: number) => (
-                    <View
-                      key={i}
-                      className={cn(
-                        'flex-row items-center justify-between p-4',
-                        i !== dashboardStock.length - 1 &&
-                          'border-b border-border/10',
-                      )}
-                    >
-                      <Text className="font-extrabold text-foreground uppercase text-[10px] tracking-widest">
-                        {item.Source}
-                      </Text>
-                      <Text className="font-black text-primary text-base">
-                        {numberWithComma(item.Amount)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
           </>
         )}
       </ScrollView>
-      <Loading isLoading={loadingStock} />
+      <Loading isLoading={false} />
     </View>
   );
 }

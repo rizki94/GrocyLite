@@ -48,12 +48,6 @@ export function HomeScreen() {
   );
 
   const {
-    data: dashboardStock,
-    isLoading: loadingStock,
-    fetchError: errorStock,
-  } = useFetch('api/bridge/dashboard_stock', refreshing);
-
-  const {
     data: dashboardPurchase,
     isLoading: loadingPurchase,
     fetchError: errorPurchase,
@@ -69,12 +63,11 @@ export function HomeScreen() {
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
-  const isLoading = loadingOmzet || loadingStock || loadingPurchase;
-  const fetchError = errorOmzet || errorStock || errorPurchase;
+  const isLoading = loadingOmzet || loadingPurchase;
+  const fetchError = errorOmzet || errorPurchase;
 
   const hasNoData =
     (!dashboardOmzet || dashboardOmzet.length === 0) &&
-    (!dashboardStock || dashboardStock.length === 0) &&
     (!dashboardPurchase || dashboardPurchase.length === 0);
 
   const getOmzetStats = () => {
@@ -99,13 +92,6 @@ export function HomeScreen() {
   };
 
   const omzetStats = getOmzetStats();
-
-  const stockTotal = Array.isArray(dashboardStock)
-    ? dashboardStock.reduce(
-        (prev: number, cur: any) => prev + Number(cur.Amount),
-        0,
-      )
-    : 0;
 
   const purchaseTotal = Array.isArray(dashboardPurchase)
     ? dashboardPurchase.reduce(
@@ -153,8 +139,9 @@ export function HomeScreen() {
           <>
             {/* Stats Grid */}
             <View className="flex-row flex-wrap justify-between mb-8">
+              {/* Omzet Card */}
               <Pressable
-                className="w-[48%] mb-4"
+                className="w-[100%] mb-4"
                 onPress={() => navigation.navigate('SalesReport' as never)}
               >
                 <View className="p-4 rounded-3xl border border-primary/30 bg-primary/5">
@@ -187,20 +174,6 @@ export function HomeScreen() {
                       {omzetStats.percentage.toFixed(1)}%
                     </Text>
                   </View>
-                </View>
-              </Pressable>
-
-              <Pressable className="w-[48%] mb-4">
-                <View className="p-4 rounded-3xl border border-amber-500/30 bg-amber-500/5">
-                  <View className="p-2 rounded-2xl bg-amber-500/10 w-10 h-10 items-center justify-center mb-3">
-                    <Package size={20} color={colors.amber} />
-                  </View>
-                  <Text className="text-xl font-black text-foreground tracking-tight">
-                    {numberWithComma(stockTotal)}
-                  </Text>
-                  <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">
-                    {t('dashboard.totalStock')}
-                  </Text>
                 </View>
               </Pressable>
 
@@ -264,34 +237,6 @@ export function HomeScreen() {
                     {t('cancelTransaction.title')}
                   </Text>
                 </Pressable>
-              </View>
-            )}
-
-            {/* Stock Breakdown */}
-            {Array.isArray(dashboardStock) && dashboardStock.length > 0 && (
-              <View className="mb-10">
-                <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
-                  {t('dashboard.stockBreakdown')}
-                </Text>
-                <View className="bg-card rounded-3xl border border-border/50 p-2 shadow-sm">
-                  {dashboardStock.map((item: any, i: number) => (
-                    <View
-                      key={i}
-                      className={cn(
-                        'flex-row items-center justify-between p-4',
-                        i !== dashboardStock.length - 1 &&
-                          'border-b border-border/10',
-                      )}
-                    >
-                      <Text className="font-extrabold text-foreground uppercase text-[10px] tracking-widest">
-                        {item.Source}
-                      </Text>
-                      <Text className="font-black text-primary text-base">
-                        {numberWithComma(item.Amount)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
               </View>
             )}
           </>

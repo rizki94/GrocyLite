@@ -38,6 +38,8 @@ export function MainTabNavigator() {
     'purchase-report',
   ];
 
+  console.log(hasPermission(financePermissions));
+
   const warehousePermissions = ['stock-opname-list', 'product-stock-list'];
   const insets = useSafeAreaInsets();
 

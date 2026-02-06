@@ -66,7 +66,8 @@ export function useAuth() {
             password,
           });
 
-          if (response.status === 200 || response.data.status === 200) {
+          // Check for status 200 in the response data as per backend convention
+          if (response.data && response.data.status === 200) {
             const data = response.data;
             const user = {
               ...data.user,
@@ -76,12 +77,17 @@ export function useAuth() {
             await storeUser(user);
             dispatch({ type: 'SET_USER', payload: user });
           } else {
-            showToast(response.data.message || 'Login failed');
+            const message = response.data?.message || 'Login failed';
+            showToast(message);
             dispatch({ type: 'SET_LOADING', payload: false });
+            throw new Error(message);
           }
         } catch (e: any) {
-          showToast(e.message || 'An error occurred');
+          if (!e.message?.includes('Login failed')) {
+            showToast(e.message || 'An error occurred');
+          }
           dispatch({ type: 'SET_LOADING', payload: false });
+          throw e; // Important for callers to handle
         }
       },
       logout: async () => {
@@ -98,7 +104,7 @@ export function useAuth() {
             params: { id: currentUser.id },
           });
 
-          if (response.data.status === 200) {
+          if (response.data && response.data.status === 200) {
             const user = {
               ...response.data.user,
               token: response.data.token,
@@ -106,9 +112,12 @@ export function useAuth() {
             };
             await storeUser(user);
             dispatch({ type: 'SET_USER', payload: user });
+          } else {
+            throw new Error(response.data?.message || 'Session refresh failed');
           }
         } catch (e) {
           console.error('Failed to refresh token', e);
+          throw e;
         }
       },
     }),

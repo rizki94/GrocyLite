@@ -96,6 +96,7 @@ export function ApproveDetailScreen({ navigation, route }: any) {
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
+  const [historyProductName, setHistoryProductName] = useState('');
 
   // Reanimated Shared Values
   const translateX = useSharedValue(0);
@@ -341,13 +342,19 @@ export function ApproveDetailScreen({ navigation, route }: any) {
     ],
   }));
 
-  const fetchHistory = async (pkey: string, accloc: string) => {
+  const fetchHistory = async (
+    pkey: string,
+    accloc: string,
+    customer: string,
+    productName: string,
+  ) => {
     setHistoryData([]);
+    setHistoryProductName(productName);
     setHistoryLoading(true);
     setHistoryModalVisible(true);
     try {
       const response = await apiClient.get('api/bridge/history_product', {
-        params: { pkey, accloc },
+        params: { pkey, accloc, customer },
       });
       setHistoryData(response.data);
     } catch (e) {
@@ -742,7 +749,12 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                                         key={idx}
                                         activeOpacity={0.7}
                                         onPress={() =>
-                                          fetchHistory(item.PKey, item.AccLoc)
+                                          fetchHistory(
+                                            item.PKey,
+                                            item.AccLoc,
+                                            targetContact,
+                                            item.Product_Name,
+                                          )
                                         }
                                         className="flex-row items-center py-3 border-b border-border/5 px-1"
                                       >
@@ -842,9 +854,17 @@ export function ApproveDetailScreen({ navigation, route }: any) {
         <View className="flex-1 justify-end bg-black/80">
           <View className="bg-card h-[80%] rounded-t-[40px] overflow-hidden">
             <View className="p-6 border-b border-border/30 flex-row justify-between items-center bg-secondary/5">
-              <Text className="text-xl text-foreground font-black uppercase tracking-tighter">
-                {t('approve.salesApprove.transactionHistory')}
-              </Text>
+              <View className="flex-1">
+                <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest leading-[8px]">
+                  {t('approve.salesApprove.transactionHistory')}
+                </Text>
+                <Text
+                  className="text-sm text-foreground font-black uppercase tracking-tighter mt-1"
+                  numberOfLines={1}
+                >
+                  {historyProductName}
+                </Text>
+              </View>
               <TouchableOpacity
                 onPress={() => setHistoryModalVisible(false)}
                 className="p-2 bg-secondary/10 rounded-full"
@@ -856,19 +876,19 @@ export function ApproveDetailScreen({ navigation, route }: any) {
               data={historyData}
               ListHeaderComponent={
                 <View className="flex-row items-center py-2 border-b border-border/10 px-2 bg-secondary/5">
-                  <Text className="flex-[1.2] text-[8px] font-black text-muted-foreground uppercase">
+                  <Text className="flex-[1] text-[8px] font-black text-muted-foreground uppercase">
                     {t('element.date')}
                   </Text>
-                  <Text className="flex-[2.5] text-[8px] font-black text-muted-foreground uppercase">
-                    {t('element.customer')}
-                  </Text>
-                  <Text className="flex-[0.8] text-[8px] font-black text-muted-foreground uppercase text-center">
+                  <Text className="flex-[0.7] text-[8px] font-black text-muted-foreground uppercase text-center">
                     {t('element.qty')}
                   </Text>
-                  <Text className="flex-[1.5] text-[8px] font-black text-muted-foreground uppercase text-right">
+                  <Text className="flex-[1.2] text-[8px] font-black text-muted-foreground uppercase text-right">
                     {t('element.price')}
                   </Text>
-                  <Text className="flex-[1.5] text-[8px] font-black text-muted-foreground uppercase text-right">
+                  <Text className="flex-[1] text-[8px] font-black text-muted-foreground uppercase text-right">
+                    {t('element.discount')}
+                  </Text>
+                  <Text className="flex-[1.3] text-[8px] font-black text-muted-foreground uppercase text-right">
                     {t('element.total')}
                   </Text>
                 </View>
@@ -877,19 +897,10 @@ export function ApproveDetailScreen({ navigation, route }: any) {
               keyExtractor={(item, idx) => idx.toString()}
               renderItem={({ item }) => (
                 <View className="flex-row items-center py-3 border-b border-border/5 px-2">
-                  <Text className="flex-[1.2] text-[9px] font-black text-muted-foreground">
-                    {new Date(item.DateTr).toLocaleDateString('id-ID', {
-                      day: '2-digit',
-                      month: '2-digit',
-                    })}
+                  <Text className="flex-[1] text-[9px] font-black text-muted-foreground">
+                    {dateFormatted(item.DateTr)}
                   </Text>
-                  <Text
-                    className="flex-[2.5] text-[9px] font-black text-foreground pr-1"
-                    numberOfLines={2}
-                  >
-                    {item.CompanyName}
-                  </Text>
-                  <View className="flex-[0.8] items-center">
+                  <View className="flex-[0.7] items-center">
                     <Text className="text-[9px] font-black text-foreground">
                       {numberWithComma(item.CQty)}
                     </Text>
@@ -897,10 +908,18 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                       {item.Unit}
                     </Text>
                   </View>
-                  <Text className="flex-[1.5] text-[9px] font-black text-primary text-right">
-                    {numberWithComma(item.Amount / item.CQty)}
+                  <Text className="flex-[1.2] text-[9px] font-black text-blue-600 text-right">
+                    {numberWithComma(item.Price)}
                   </Text>
-                  <Text className="flex-[1.5] text-[10px] font-black text-foreground text-right">
+                  <Text
+                    className="flex-[1] text-[9px] font-black text-right"
+                    style={{
+                      color: item.Discount > 0 ? colors.red : colors.green,
+                    }}
+                  >
+                    {numberWithComma(item.Discount)}
+                  </Text>
+                  <Text className="flex-[1.3] text-[10px] font-black text-foreground text-right">
                     {numberWithComma(item.Amount)}
                   </Text>
                 </View>

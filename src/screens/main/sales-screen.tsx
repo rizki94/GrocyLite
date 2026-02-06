@@ -35,36 +35,10 @@ export function SalesScreen() {
   const { hasPermission } = usePermissions();
   const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch pending approvals for today
-  const {
-    data: pendingApprovals,
-    isLoading: loadingApprovals,
-    fetchError,
-  } = useFetchWithParams(
-    'api/bridge/approve_list',
-    { params: { date: dateFormatted(new Date()), status: 'false' } },
-    [],
-    refreshing,
-  );
-
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
-
-  const totalPendingAmount = Array.isArray(pendingApprovals)
-    ? pendingApprovals.reduce(
-        (acc: number, curr: any) => acc + Number(curr.Amount),
-        0,
-      )
-    : 0;
-
-  const totalPendingInvoices = Array.isArray(pendingApprovals)
-    ? pendingApprovals.reduce(
-        (acc: number, curr: any) => acc + Number(curr.Invoices),
-        0,
-      )
-    : 0;
 
   const menuItems = [
     {
@@ -105,7 +79,7 @@ export function SalesScreen() {
     },
   ].filter(item => !item.permission || hasPermission(item.permission));
 
-  const isLoading = loadingApprovals;
+  const isLoading = false;
 
   return (
     <View
@@ -135,35 +109,10 @@ export function SalesScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
       >
-        {fetchError && (!pendingApprovals || pendingApprovals.length === 0) ? (
-          <ConnectionError onRetry={onRefresh} message={fetchError} />
+        {false ? (
+          <ConnectionError onRetry={onRefresh} message={''} />
         ) : (
           <>
-            {/* Short Summary Card */}
-            <Pressable
-              className="mb-8"
-              onPress={() => navigation.navigate('SalesApprove')}
-            >
-              <View className="p-4 rounded-3xl border border-green-500/30 bg-green-500/5">
-                <View className="flex-row items-center justify-between">
-                  <View>
-                    <View className="p-2 rounded-2xl bg-green-500/10 w-10 h-10 items-center justify-center mb-3">
-                      <ClipboardCheck size={20} color={colors.green} />
-                    </View>
-                    <Text className="text-2xl font-black text-foreground tracking-tight">
-                      {numberWithComma(totalPendingAmount)}
-                    </Text>
-                    <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mt-1">
-                      {totalPendingInvoices} Invoices Pending Approval
-                    </Text>
-                  </View>
-                  <View className="bg-green-500/10 p-3 rounded-2xl">
-                    <ArrowRight size={20} color={colors.green} />
-                  </View>
-                </View>
-              </View>
-            </Pressable>
-
             <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
               Sales Operations MENU
             </Text>
