@@ -17,6 +17,8 @@ import {
   MapPin,
   RotateCcw,
   Ban,
+  RefreshCw,
+  Cloud,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DatePicker } from '../../components/ui/date-picker';
@@ -27,6 +29,8 @@ import { Loading } from '../../components/ui/loading';
 import { ConnectionError } from '../../components/connection-error';
 import { usePermissions } from '../../hooks/use-permissions';
 
+import { useOffline } from '../../hooks/use-offline';
+
 export function HomeScreen() {
   const { t } = useTranslation();
   const { hasPermission } = usePermissions();
@@ -35,6 +39,7 @@ export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [date, setDate] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
+  const { isOffline, queue, processQueue, isSyncing } = useOffline();
 
   const {
     data: dashboardOmzet,
@@ -95,9 +100,9 @@ export function HomeScreen() {
 
   const purchaseTotal = Array.isArray(dashboardPurchase)
     ? dashboardPurchase.reduce(
-        (prev: number, cur: any) => prev + Number(cur.Amount),
-        0,
-      )
+      (prev: number, cur: any) => prev + Number(cur.Amount),
+      0,
+    )
     : 0;
 
   return (
@@ -133,7 +138,45 @@ export function HomeScreen() {
           <DatePicker value={date} onChange={setDate} />
         </View>
 
-        {fetchError && hasNoData ? (
+        {/* Offline Banner */}
+        {isOffline && (
+          <View className="mb-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl">
+            <Text className="text-orange-600 font-bold text-sm text-center">
+              📡 {t('element.offline') || 'Offline Mode'} - {t('element.showingCachedData') || 'Showing cached data'}
+            </Text>
+          </View>
+        )}
+
+        {/* Sync Queue Banner */}
+        {!isOffline && queue.length > 0 && (
+          <TouchableOpacity
+            onPress={() => processQueue()}
+            disabled={isSyncing}
+            className="mb-4 p-4 bg-primary/10 border border-primary/30 rounded-2xl flex-row items-center justify-between"
+          >
+            <View className="flex-row items-center">
+              <View className="mr-3">
+                <Cloud size={20} color={colors.primary} />
+              </View>
+              <View>
+                <Text className="text-primary font-bold text-sm">
+                  {t('element.pendingActions')} ({queue.length})
+                </Text>
+                <Text className="text-primary/60 text-[10px] uppercase font-bold tracking-tighter">
+                  {isSyncing ? 'Syncing...' : t('element.syncNow')}
+                </Text>
+              </View>
+            </View>
+            <View className={isSyncing ? 'animate-spin' : ''}>
+              <RefreshCw
+                size={18}
+                color={colors.primary}
+              />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {fetchError && hasNoData && !isOffline ? (
           <ConnectionError onRetry={onRefresh} message={fetchError} />
         ) : (
           <>

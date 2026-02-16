@@ -66,14 +66,23 @@ export function useAuth() {
             password,
           });
 
-          // Check for status 200 in the response data as per backend convention
+          // console.log('Login Response:', response.data);
+
           if (response.data && response.data.status === 200) {
             const data = response.data;
+            console.log(data)
+            // Explicitly map attributes to ensure they are preserved
             const user = {
-              ...data.user,
+              ...(data.user || {}),
               token: data.token,
               permission: data.permission,
+              // Backend appends
+              role_name: data.user?.role_name,
+              group_name: data.user?.group_name,
+              avatar: data.user?.avatar,
             };
+
+            // console.log('Storing user:', user);
             await storeUser(user);
             dispatch({ type: 'SET_USER', payload: user });
           } else {
@@ -105,10 +114,15 @@ export function useAuth() {
           });
 
           if (response.data && response.data.status === 200) {
+            const data = response.data;
             const user = {
-              ...response.data.user,
-              token: response.data.token,
-              permission: response.data.permission,
+              ...(data.user || {}),
+              token: data.token,
+              permission: data.permission,
+              // Backend appends
+              role_name: data.user?.role_name,
+              group_name: data.user?.group_name,
+              avatar: data.user?.avatar,
             };
             await storeUser(user);
             dispatch({ type: 'SET_USER', payload: user });

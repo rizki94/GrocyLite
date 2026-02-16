@@ -68,86 +68,82 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ConnectionContext.Provider value={connection}>
           <AuthContext.Provider value={auth}>
-            <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
-              <Stack.Navigator screenOptions={{ headerShown: false }}>
-                {state.loading ? (
-                  <Stack.Screen name="Splash" component={SplashScreen} />
-                ) : state.user ? (
-                  <>
-                    <Stack.Screen name="Main">
-                      {() => (
-                        <UserContext.Provider value={state.user}>
-                          <MainTabNavigator />
-                        </UserContext.Provider>
-                      )}
-                    </Stack.Screen>
-                    <Stack.Screen
-                      name="StockOpnameDetail"
-                      component={StockOpnameScreen}
-                    />
-                    <Stack.Screen
-                      name="AccountDetail"
-                      component={AccountScreen}
-                    />
-                    <Stack.Screen
-                      name="StockOpnameList"
-                      component={StockOpnameListScreen}
-                    />
-                    <Stack.Screen name="Profit" component={ProfitScreen} />
-                    <Stack.Screen
-                      name="SalesApprove"
-                      component={SalesApproveScreen}
-                    />
-                    <Stack.Screen
-                      name="ApproveDetail"
-                      component={ApproveDetailScreen}
-                    />
-                    <Stack.Screen
-                      name="CancelTransaction"
-                      component={CancelTransactionScreen}
-                    />
-                    <Stack.Screen
-                      name="SalesReport"
-                      component={SalesReportScreen}
-                    />
-                    <Stack.Screen name="Purchase" component={PurchaseScreen} />
-                    <Stack.Screen
-                      name="SalesReturn"
-                      component={SalesReturnScreen}
-                    />
-                    <Stack.Screen
-                      name="DebtPayments"
-                      component={DebtPaymentsScreen}
-                    />
-                    <Stack.Screen
-                      name="CreditPayments"
-                      component={CreditPaymentsScreen}
-                    />
-                    <Stack.Screen
-                      name="Attendance"
-                      component={AttendanceScreen}
-                    />
-                    <Stack.Screen
-                      name="VisitReport"
-                      component={VisitReportScreen}
-                    />
-                    <Stack.Screen
-                      name="AttendanceRoute"
-                      component={AttendanceRouteScreen}
-                    />
-                    <Stack.Screen name="Products" component={ProductsScreen} />
-                  </>
-                ) : (
-                  <>
-                    <Stack.Screen name="Auth" component={LoginScreen} />
-                    <Stack.Screen
-                      name="ServerConfiguration"
-                      component={ServerConfigurationScreen}
-                    />
-                  </>
-                )}
-              </Stack.Navigator>
-            </NavigationContainer>
+            <UserContext.Provider value={state.user}>
+              <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                  {state.loading ? (
+                    <Stack.Screen name="Splash" component={SplashScreen} />
+                  ) : state.user ? (
+                    <>
+                      <Stack.Screen name="Main" component={MainTabNavigator} />
+                      <Stack.Screen
+                        name="StockOpnameDetail"
+                        component={StockOpnameScreen}
+                      />
+                      <Stack.Screen
+                        name="AccountDetail"
+                        component={AccountScreen}
+                      />
+                      <Stack.Screen
+                        name="StockOpnameList"
+                        component={StockOpnameListScreen}
+                      />
+                      <Stack.Screen name="Profit" component={ProfitScreen} />
+                      <Stack.Screen
+                        name="SalesApprove"
+                        component={SalesApproveScreen}
+                      />
+                      <Stack.Screen
+                        name="ApproveDetail"
+                        component={ApproveDetailScreen}
+                      />
+                      <Stack.Screen
+                        name="CancelTransaction"
+                        component={CancelTransactionScreen}
+                      />
+                      <Stack.Screen
+                        name="SalesReport"
+                        component={SalesReportScreen}
+                      />
+                      <Stack.Screen name="Purchase" component={PurchaseScreen} />
+                      <Stack.Screen
+                        name="SalesReturn"
+                        component={SalesReturnScreen}
+                      />
+                      <Stack.Screen
+                        name="DebtPayments"
+                        component={DebtPaymentsScreen}
+                      />
+                      <Stack.Screen
+                        name="CreditPayments"
+                        component={CreditPaymentsScreen}
+                      />
+                      <Stack.Screen
+                        name="Attendance"
+                        component={AttendanceScreen}
+                      />
+                      <Stack.Screen
+                        name="VisitReport"
+                        component={VisitReportScreen}
+                      />
+                      <Stack.Screen
+                        name="AttendanceRoute"
+                        component={AttendanceRouteScreen}
+                      />
+                      <Stack.Screen name="Products" component={ProductsScreen} />
+                    </>
+                  ) : (
+                    <>
+                      <Stack.Screen name="Auth" component={LoginScreen} />
+                      <Stack.Screen
+                        name="ServerConfiguration"
+                        component={ServerConfigurationScreen}
+                      />
+                    </>
+                  )}
+                </Stack.Navigator>
+              </NavigationContainer>
+            </UserContext.Provider>
           </AuthContext.Provider>
         </ConnectionContext.Provider>
         <StatusBar

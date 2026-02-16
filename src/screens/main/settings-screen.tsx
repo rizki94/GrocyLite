@@ -1,10 +1,10 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, Modal } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card } from '../../components/ui/card';
 import { AuthContext, UserContext } from '../../contexts/app-context';
 import {
-  User,
+  User as UserIcon,
   LogOut,
   Moon,
   Globe,
@@ -62,6 +62,11 @@ export function SettingsScreen() {
     { label: t('settings.selectLanguange.bahasa'), value: 'id' },
   ];
 
+  const roleName = user?.role_name || user?.role;
+  const displayRole = roleName?.toLowerCase() === 'administrator'
+    ? t('settings.administrator')
+    : (roleName || t('settings.administrator'));
+
   return (
     <View
       className="flex-1 bg-background"
@@ -90,15 +95,22 @@ export function SettingsScreen() {
             className="p-6 flex-row items-center bg-primary active:opacity-90"
             onPress={() => navigation.navigate('AccountDetail' as never)}
           >
-            <View className="w-16 h-16 bg-white/20 rounded-2xl items-center justify-center mr-4 border border-white/30">
-              <User size={32} color="#ffffff" />
+            <View className="w-16 h-16 bg-white/20 rounded-2xl items-center justify-center mr-4 border border-white/30 overflow-hidden">
+              {user?.avatar ? (
+                <Image
+                  source={{ uri: user.avatar }}
+                  className="w-full h-full"
+                />
+              ) : (
+                <UserIcon size={32} color="#ffffff" />
+              )}
             </View>
             <View className="flex-1">
               <Text className="text-xl font-black text-white tracking-tight">
                 {user?.name || 'Admin User'}
               </Text>
               <Text className="text-xs font-bold text-white/70 uppercase tracking-widest mt-0.5">
-                {t('settings.administrator')}
+                {displayRole}
               </Text>
             </View>
             <View className="bg-white/10 p-2 rounded-xl">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -9,9 +9,10 @@ import {
   Modal,
   ToastAndroid,
   TouchableOpacity,
+  TextInput,
+  Keyboard,
 } from 'react-native';
 import {
-  SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import { cn } from '../../lib/utils';
@@ -24,34 +25,35 @@ import {
   X,
   Search,
   Eye,
-  EyeOff,
   Filter,
   CheckCircle,
   Unlock,
   RotateCcw,
   ArrowLeft,
   ChevronDown,
-  ChevronUp,
-  MoreVertical,
   Calendar,
   FileText,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
-import { Card } from '../../components/ui/card';
 import { DatePicker } from '../../components/ui/date-picker';
 import { Loading } from '../../components/ui/loading';
 import moment from 'moment';
 import uuid from 'react-native-uuid';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConnection } from '../../hooks/use-connection';
 import { useThemeColor } from '../../lib/colors';
 import { useAuth } from '../../hooks/use-auth';
 import { useDebounce } from '../../hooks/use-debounce';
+import { useOffline } from '../../hooks/use-offline';
 
 // Types
 type RootStackParamList = {
   StockOpnameDetail: { invoice: string | number };
+  StockOpnameList: undefined;
 };
 
 type StockOpnameScreenRouteProp = RouteProp<
@@ -102,12 +104,12 @@ export function StockOpnameScreen() {
   const { apiClient } = useConnection();
   const { state } = useAuth();
   const { t } = useTranslation();
+  const { isOffline, addToQueue, queue, processQueue, isSyncing } = useOffline();
 
   const [date, setDate] = useState(new Date());
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState(0); // 0: Open/Draft, 1: Approved
   const [items, setItems] = useState<InvoiceItem[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
 
   // Edit State
   const [isEdit, setIsEdit] = useState(false);
@@ -123,8 +125,8 @@ export function StockOpnameScreen() {
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [productSearch, setProductSearch] = useState('');
-  const [showProductModal, setShowProductModal] = useState(false);
-  const debouncedProductSearch = useDebounce(productSearch, 500);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const debouncedProductSearch = useDebounce(productSearch, 800);
 
   // Stock details modal
   const [showStockDetail, setShowStockDetail] = useState(false);
@@ -134,13 +136,126 @@ export function StockOpnameScreen() {
   const [refreshWarehouse, setRefreshWarehouse] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // New Features
+  // Filter Features
   const [hideEmpty, setHideEmpty] = useState(false);
   const [showSystemStock, setShowSystemStock] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   const [showDateModal, setShowDateModal] = useState(false);
+  const [cachedProducts, setCachedProducts] = useState<Product[]>([]);
+
+  const qtyInputRef = useRef<TextInput>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // Load product cache for offline capability
+  const loadCache = async () => {
+    try {
+      const cached = await AsyncStorage.getItem('products_full_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setCachedProducts(parsed.map((p: any) => ({
+          id: p.id || p.PKey,
+          name: p.Name || p.name,
+          Unit: p.unit1 || p.Unit,
+          Unit2: p.unit2 || p.Unit2,
+          Unit3: p.unit3 || p.Unit3,
+          Unit4: p.unit4 || p.Unit4,
+          Rat1: p.ratio1 || p.Rat1 || 1,
+          Rat2: p.ratio2 || p.Rat2 || 1,
+          Rat3: p.ratio3 || p.Rat3 || 1,
+          Rat4: p.ratio4 || p.Rat4 || 1,
+          stock: p.Stock || p.stock || 0,
+        })));
+      }
+    } catch (err) {
+      console.error('Failed to load product cache', err);
+    }
+  };
+
+  useEffect(() => {
+    loadCache();
+  }, []);
+
+  // Robust Sync Mechanism
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const syncAllProducts = async () => {
+    if (isOffline) {
+      Alert.alert(t('element.error'), t('element.mustConnectInternet'));
+      return;
+    }
+
+    try {
+      setIsSyncingAll(true);
+      let currentPage = 1;
+      let allProducts: any[] = [];
+      let hasMoreData = true;
+
+      while (hasMoreData) {
+        const response = await apiClient.get('/api/bridge/product_stock_list', {
+          params: { search: '', page: currentPage, limit: 100 },
+        });
+        const pageData = Array.isArray(response.data) ? response.data : response.data?.data;
+
+        if (Array.isArray(pageData) && pageData.length > 0) {
+          allProducts = [...allProducts, ...pageData];
+          currentPage++;
+          hasMoreData = pageData.length === 100;
+        } else {
+          hasMoreData = false;
+        }
+      }
+
+      const mapped = allProducts.map((p: any) => ({
+        id: p.id || p.PKey,
+        name: p.Name,
+        Unit: p.unit1,
+        Unit2: p.unit2,
+        Unit3: p.unit3,
+        Unit4: p.unit4,
+        Rat1: p.ratio1 || 1,
+        Rat2: p.ratio2 || 1,
+        Rat3: p.ratio3 || 1,
+        Rat4: p.ratio4 || 1,
+        stock: p.Stock || 0,
+      }));
+
+      setCachedProducts(mapped);
+      await AsyncStorage.setItem('products_full_cache', JSON.stringify(allProducts));
+      await AsyncStorage.setItem('products_last_sync', new Date().toDateString());
+
+      if (mapped.length > 0) {
+        Alert.alert(t('element.success'), `Saved ${mapped.length} products to cache.`);
+      }
+    } catch (e) {
+      console.error('Sync failed', e);
+      Alert.alert(t('element.error'), 'Failed to sync product database');
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
+
+  const hasCheckedSync = useRef(false);
+
+  // Background sync once per day
+  useEffect(() => {
+    const checkAndSync = async () => {
+      if (isOffline || hasCheckedSync.current) return;
+      hasCheckedSync.current = true;
+
+      try {
+        const lastSync = await AsyncStorage.getItem('products_last_sync');
+        const today = new Date().toDateString();
+
+        if (lastSync !== today) {
+          syncAllProducts();
+        }
+      } catch (e) {
+        console.error('Failed to check sync status', e);
+      }
+    };
+
+    checkAndSync();
+  }, [isOffline]);
 
   // Helper: Format Split Stock
   const formatSplitStock = (
@@ -171,65 +286,54 @@ export function StockOpnameScreen() {
     return parts.length > 0 ? parts.join(' ') : `0 ${p.Unit}`;
   };
 
-  // Load Data
+  // Auto-focus quantity input when product is selected
+  useEffect(() => {
+    if (selectedProduct) {
+      setTimeout(() => {
+        qtyInputRef.current?.focus();
+      }, 150);
+    }
+  }, [selectedProduct]);
+
+  // Load Data via API
   const {
     data: fetchInvoice,
     isLoading: invoiceLoading,
-    refetch: refetchInvoice,
   } = useFetchWithParams(
-    'api/stock_opname/show',
+    '/api/stock_opname/show',
     { params: { invoice: _invoice } },
     _invoice.toString(),
   );
 
-  const { data: fetchedProducts, isLoading: productsLoading } =
-    useFetchWithParams(
-      'api/bridge/product_stock_list',
-      { params: { search: debouncedProductSearch, limit: 50 } },
-      debouncedProductSearch,
-      refreshing,
-    );
 
   const {
     data: stockByWarehouse,
     isLoading: warehouseLoading,
     refetch: refetchWarehouseData,
   } = useFetchWithParams(
-    'api/bridge/stock_system_by_warehouse',
+    '/api/bridge/stock_system_by_warehouse',
     { params: { product_id: stockDetailProduct?.id } },
     stockDetailProduct?.id || '',
     refreshWarehouse,
   );
 
   const { data: stock, isLoading: stockLoading } = useFetch(
-    'api/bridge/stock_system',
+    '/api/bridge/stock_system',
   );
 
-  useEffect(() => {
-    const productListData = Array.isArray(fetchedProducts)
-      ? fetchedProducts
-      : fetchedProducts?.data;
-
-    if (Array.isArray(productListData)) {
-      setProducts(
-        productListData.map(p => ({
-          ...p,
-          id: p.id,
-          name: p.Name,
-          Unit: p.unit1,
-          Unit2: p.unit2,
-          Unit3: p.unit3,
-          Unit4: p.unit4,
-          Rat1: p.ratio1,
-          Rat2: p.ratio2,
-          Rat3: p.ratio3,
-          Rat4: p.ratio4,
-          stock: p.Stock,
-        })),
-      );
+  // Sync products list from cache for a truly instant experience
+  const products = useMemo(() => {
+    const lowerQuery = productSearch.toLowerCase().trim();
+    if (!lowerQuery) {
+      return cachedProducts.slice(0, 50);
     }
-  }, [fetchedProducts]);
 
+    return cachedProducts.filter(p =>
+      p.name.toLowerCase().includes(lowerQuery)
+    ).slice(0, 50);
+  }, [productSearch, cachedProducts]);
+
+  // Initialize Invoice Data
   useEffect(() => {
     if (_invoice && fetchInvoice?.invoice) {
       setDate(new Date(fetchInvoice.invoice.date));
@@ -252,30 +356,34 @@ export function StockOpnameScreen() {
         })),
       };
 
+      if (isOffline) {
+        await addToQueue(
+          _invoice ? `/api/stock_opname/${_invoice}` : '/api/stock_opname/create',
+          _invoice ? 'PUT' : 'POST',
+          payload,
+          {},
+          _invoice ? `Update SO #${_invoice}` : 'Create Stock Opname'
+        );
+        ToastAndroid.show(t('element.savedOffline'), ToastAndroid.SHORT);
+        navigation.goBack();
+        return;
+      }
+
       let response;
       if (_invoice) {
-        response = await apiClient.put(`api/stock_opname/${_invoice}`, payload);
+        response = await apiClient.put(`/api/stock_opname/${_invoice}`, payload);
       } else {
-        response = await apiClient.post('api/stock_opname/create', payload);
+        response = await apiClient.post('/api/stock_opname/create', payload);
       }
 
       if (response.data.status === 200) {
-        ToastAndroid.show(
-          t('warehouse.stockOpname.savedSuccess'),
-          ToastAndroid.SHORT,
-        );
+        ToastAndroid.show(t('warehouse.stockOpname.savedSuccess'), ToastAndroid.SHORT);
         navigation.goBack();
       } else {
-        ToastAndroid.show(
-          response.data.message || t('warehouse.stockOpname.errorSaving'),
-          ToastAndroid.SHORT,
-        );
+        ToastAndroid.show(response.data.message || t('warehouse.stockOpname.errorSaving'), ToastAndroid.SHORT);
       }
     } catch (e: any) {
-      ToastAndroid.show(
-        e.message || t('error.serverNotAvailable'),
-        ToastAndroid.SHORT,
-      );
+      ToastAndroid.show(e.message || t('error.serverNotAvailable'), ToastAndroid.SHORT);
     }
   };
 
@@ -289,29 +397,21 @@ export function StockOpnameScreen() {
           text: t('approve.salesApprove.approve'),
           onPress: async () => {
             try {
-              const response = await apiClient.post(
-                'api/stock_opname/approve',
-                {
-                  invoice: _invoice,
-                },
-              );
+              if (isOffline) {
+                await addToQueue('/api/stock_opname/approve', 'POST', { invoice: _invoice }, {}, `Approve SO #${_invoice}`);
+                ToastAndroid.show(t('element.savedOffline'), ToastAndroid.SHORT);
+                setStatus(1);
+                return;
+              }
+              const response = await apiClient.post('/api/stock_opname/approve', { invoice: _invoice });
               if (response.data.status === 200) {
-                ToastAndroid.show(
-                  t('approve.salesApprove.approved'),
-                  ToastAndroid.SHORT,
-                );
+                ToastAndroid.show(t('approve.salesApprove.approved'), ToastAndroid.SHORT);
                 setStatus(1);
               } else {
-                ToastAndroid.show(
-                  t('approve.salesApprove.failedUpdateStatus'),
-                  ToastAndroid.SHORT,
-                );
+                ToastAndroid.show(t('approve.salesApprove.failedUpdateStatus'), ToastAndroid.SHORT);
               }
             } catch (e: any) {
-              ToastAndroid.show(
-                e.message || t('error.serverNotAvailable'),
-                ToastAndroid.SHORT,
-              );
+              ToastAndroid.show(e.message || t('error.serverNotAvailable'), ToastAndroid.SHORT);
             }
           },
         },
@@ -329,23 +429,21 @@ export function StockOpnameScreen() {
           text: t('general.open'),
           onPress: async () => {
             try {
-              const response = await apiClient.post('api/stock_opname/open', {
-                invoice: _invoice,
-              });
+              if (isOffline) {
+                await addToQueue('/api/stock_opname/open', 'POST', { invoice: _invoice }, {}, `Reopen SO #${_invoice}`);
+                ToastAndroid.show(t('element.savedOffline'), ToastAndroid.SHORT);
+                setStatus(0);
+                return;
+              }
+              const response = await apiClient.post('/api/stock_opname/open', { invoice: _invoice });
               if (response.data.status === 200) {
                 ToastAndroid.show(t('general.open'), ToastAndroid.SHORT);
                 setStatus(0);
               } else {
-                ToastAndroid.show(
-                  t('approve.salesApprove.failedUpdateStatus'),
-                  ToastAndroid.SHORT,
-                );
+                ToastAndroid.show(t('approve.salesApprove.failedUpdateStatus'), ToastAndroid.SHORT);
               }
             } catch (e: any) {
-              ToastAndroid.show(
-                e.message || t('error.serverNotAvailable'),
-                ToastAndroid.SHORT,
-              );
+              ToastAndroid.show(e.message || t('error.serverNotAvailable'), ToastAndroid.SHORT);
             }
           },
         },
@@ -356,14 +454,9 @@ export function StockOpnameScreen() {
   const addItem = () => {
     if (!selectedProduct) return;
 
-    const existingIndex = items.findIndex(
-      i => i.product_id === selectedProduct.id,
-    );
+    const existingIndex = items.findIndex(i => i.product_id === selectedProduct.id);
     if (existingIndex >= 0) {
-      ToastAndroid.show(
-        `${t('warehouse.stockOpname.itemAlreadyAdded')} ${existingIndex + 1}`,
-        ToastAndroid.SHORT,
-      );
+      ToastAndroid.show(`${t('warehouse.stockOpname.itemAlreadyAdded')} ${existingIndex + 1}`, ToastAndroid.SHORT);
       return;
     }
 
@@ -387,38 +480,35 @@ export function StockOpnameScreen() {
 
     setItems([...items, newItem]);
     resetForm();
+    Keyboard.dismiss();
   };
 
   const updateItem = () => {
     if (!editingId || !selectedProduct) return;
 
-    setItems(
-      items.map(item =>
-        item.id === editingId
-          ? {
-              ...item,
-              qty1: currentQty.qty1,
-              qty2: currentQty.qty2,
-              qty3: currentQty.qty3,
-              qty4: currentQty.qty4,
-            }
-          : item,
-      ),
-    );
+    setItems(items.map(item =>
+      item.id === editingId
+        ? {
+          ...item,
+          qty1: currentQty.qty1,
+          qty2: currentQty.qty2,
+          qty3: currentQty.qty3,
+          qty4: currentQty.qty4,
+        }
+        : item,
+    ));
 
     resetForm();
     setIsEdit(false);
     setEditingId(null);
+    Keyboard.dismiss();
   };
 
   const deleteItem = (id: string) => {
     setItems(items.filter(i => i.id !== id));
   };
 
-  const scrollViewRef = useRef<ScrollView>(null);
-
   const startEdit = (item: InvoiceItem) => {
-    // Reconstruct product from item if not in fetched products
     const prod = products.find(p => p.id === item.product_id) || {
       id: item.product_id,
       name: item.product_name || 'Unknown',
@@ -432,7 +522,7 @@ export function StockOpnameScreen() {
       Rat4: item.ratio4 || 1,
     };
 
-    setSelectedProduct(prod);
+    setSelectedProduct(prod as Product);
     setCurrentQty({
       qty1: item.qty1,
       qty2: item.qty2,
@@ -448,6 +538,7 @@ export function StockOpnameScreen() {
     setSelectedProduct(null);
     setCurrentQty({ qty1: 0, qty2: 0, qty3: 0, qty4: 0 });
     setProductSearch('');
+    setShowSearchResults(false);
   };
 
   const getSystemStock = (productId: string) => {
@@ -465,37 +556,24 @@ export function StockOpnameScreen() {
 
   const getDifference = (item: InvoiceItem) => {
     const total = calculateTotal(item);
-    const sysStock =
-      item.sys_stock !== undefined
-        ? Number(item.sys_stock)
-        : getSystemStock(item.product_id);
+    const sysStock = item.sys_stock !== undefined ? Number(item.sys_stock) : getSystemStock(item.product_id);
     return total - sysStock;
   };
 
-  const filteredItems = items
-    .filter(item => {
-      const prodName =
-        item.product_name ||
-        products.find(p => p.id === item.product_id)?.name ||
-        '';
-      const matchesSearch = prodName
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      const prodName = item.product_name || products.find(p => p.id === item.product_id)?.name || '';
+      const matchesSearch = prodName.toLowerCase().includes(searchQuery.toLowerCase());
       if (hideEmpty) {
         const diff = getDifference(item);
         return matchesSearch && diff !== 0;
       }
-
       return matchesSearch;
-    })
-    .map(item => ({
+    }).map(item => ({
       ...item,
-      product_name:
-        item.product_name ||
-        products.find(p => p.id === item.product_id)?.name ||
-        'Unknown',
+      product_name: item.product_name || products.find(p => p.id === item.product_id)?.name || 'Unknown',
     }));
+  }, [items, searchQuery, hideEmpty, products, stock]);
 
   const getProductSource = (productId: string) => {
     return stock?.find((s: any) => s.PKey === productId)?.Source || '';
@@ -504,676 +582,442 @@ export function StockOpnameScreen() {
   const insets = useSafeAreaInsets();
 
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{
-        paddingTop: insets.top,
-        paddingLeft: insets.left,
-        paddingRight: insets.right,
-        paddingBottom: insets.bottom,
-      }}
-    >
-      {/* Top Navigation */}
-      <View className="bg-card border-b border-border shadow-sm">
-        <View className="flex-row items-center justify-between px-4 py-2">
-          <View className="flex-row items-center flex-1">
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              className="p-2 -ml-2 rounded-full active:bg-secondary/20"
-            >
-              <ArrowLeft size={24} color={colors.foreground} />
-            </TouchableOpacity>
-            <Text className="text-lg font-bold text-foreground ml-1">
-              {_invoice
-                ? `SO #${_invoice}`
-                : t('warehouse.stockOpname.newOpname')}
+    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      {/* Dynamic Header */}
+      <View className="bg-card border-b border-border shadow-md">
+        <View className="flex-row items-center px-4 py-3">
+          <TouchableOpacity onPress={() => navigation.goBack()} className="p-2 -ml-2 rounded-full">
+            <ArrowLeft size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <View className="flex-1 ml-1 overflow-hidden">
+            <Text className="text-lg font-black text-foreground" numberOfLines={1}>
+              {_invoice ? `SO #${_invoice}` : t('warehouse.stockOpname.newOpname')}
             </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => {
-              const newItems = items.map(item => ({
-                ...item,
-                sys_stock: undefined,
-              }));
-              setItems(newItems);
-            }}
-            className="p-2 rounded-full active:bg-secondary/20"
-          >
-            <RotateCcw size={20} color={colors.foreground} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Row 1: Summary & Filter Button */}
-        <View className="px-4 pb-3 flex-row gap-2 items-center">
-          <TouchableOpacity
-            onPress={() => setShowDateModal(true)}
-            className="flex-1 bg-secondary/10 rounded-xl px-3 py-1.5 border border-border/30 h-14 justify-center"
-          >
-            <View className="flex-row items-center justify-between">
+            <Pressable onPress={() => setShowDateModal(true)} className="flex-row items-center opacity-60">
+              <Calendar size={10} color={colors.foreground} className="mr-1" />
+              <Text className="ml-1 text-[10px] font-bold text-foreground">{moment(date).format('DD MMM YYYY')}</Text>
+              <Text className="mx-1 text-foreground">•</Text>
               <View className="flex-1">
-                <View className="flex-row gap-2 items-center mb-0.5">
-                  <Calendar size={10} color={colors.primary} className="mr-1" />
-                  <Text className="text-[10px] font-bold text-foreground">
-                    {moment(date).format('DD MMM YYYY')}
-                  </Text>
-                </View>
-                <View className="flex-row gap-2 items-center">
-                  <FileText
-                    size={10}
-                    color={colors.mutedForeground}
-                    className="mr-1"
-                  />
-                  <Text
-                    className="text-[10px] text-muted-foreground"
-                    numberOfLines={1}
-                  >
-                    {notes || t('warehouse.stockOpname.tapToAddNotes')}
-                  </Text>
-                </View>
+                <Text className="text-[10px] font-bold text-foreground" numberOfLines={1}>
+                  {notes || t('warehouse.stockOpname.tapToAddNotes')}
+                </Text>
               </View>
-              <View className="ml-1 opacity-50">
-                <Edit2 size={12} color={colors.primary} />
-              </View>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setShowOptions(!showOptions)}
-            className={`p-3 rounded-xl border h-14 w-14 items-center justify-center ${showOptions ? 'bg-primary border-primary' : 'bg-card border-border shadow-sm'}`}
-          >
-            <Filter size={22} color={showOptions ? '#fff' : colors.primary} />
-          </TouchableOpacity>
+            </Pressable>
+          </View>
+          <View className="flex-row items-center gap-1">
+            <TouchableOpacity onPress={() => setShowOptions(!showOptions)} className={cn("p-2 rounded-xl", showOptions && "bg-primary/10")}>
+              <Filter size={20} color={showOptions ? colors.primary : colors.foreground} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => syncAllProducts()}
+              disabled={isSyncingAll}
+              className={cn("p-2", isSyncingAll && "opacity-50")}
+            >
+              <RotateCcw size={20} color={colors.foreground} className={cn(isSyncingAll && "animate-spin")} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Filter Options Menu */}
         {showOptions && (
-          <View className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-200">
-            <View className="bg-secondary/10 rounded-2xl p-2 flex-row gap-2">
-              <TouchableOpacity
-                onPress={() => setShowSystemStock(!showSystemStock)}
-                className={`flex-1 flex-row gap-2 items-center justify-center py-2.5 rounded-xl border ${
-                  showSystemStock
-                    ? 'bg-green-600 border-green-600'
-                    : 'bg-background border-border'
-                }`}
-              >
-                <Eye
-                  size={16}
-                  color={showSystemStock ? '#fff' : colors.green}
-                  className="mr-2"
-                />
-                <Text
-                  className={`text-[10px] font-bold ${showSystemStock ? 'text-white' : 'text-foreground'}`}
-                >
-                  {t('warehouse.stockOpname.system').toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setHideEmpty(!hideEmpty)}
-                className={`flex-1 flex-row gap-2 items-center justify-center py-2.5 rounded-xl border ${
-                  hideEmpty
-                    ? 'bg-indigo-600 border-indigo-600'
-                    : 'bg-background border-border'
-                }`}
-              >
-                <Filter
-                  size={16}
-                  color={hideEmpty ? '#fff' : colors.indigo}
-                  className="mr-2"
-                />
-                <Text
-                  className={`text-[10px] font-bold ${hideEmpty ? 'text-white' : 'text-foreground'}`}
-                >
-                  {t('warehouse.stockOpname.difference').toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setShowSearch(!showSearch)}
-                className={`flex-1 flex-row gap-2 items-center justify-center py-2.5 rounded-xl border ${
-                  showSearch
-                    ? 'bg-primary border-primary'
-                    : 'bg-background border-border'
-                }`}
-              >
-                <Search
-                  size={16}
-                  color={showSearch ? '#fff' : colors.primary}
-                  className="mr-2"
-                />
-                <Text
-                  className={`text-[10px] font-bold ${showSearch ? 'text-white' : 'text-foreground'}`}
-                >
-                  {t('general.search').toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-            </View>
+          <View className="px-4 pb-4 flex-row gap-2">
+            <Button
+              variant={showSystemStock ? 'default' : 'outline'}
+              size="sm"
+              className="flex-1 h-10 rounded-xl"
+              onPress={() => setShowSystemStock(!showSystemStock)}
+              label={t('warehouse.stockOpname.system')}
+              leftIcon={<Eye size={12} color={showSystemStock ? "#fff" : colors.primary} />}
+            />
+            <Button
+              variant={hideEmpty ? 'default' : 'outline'}
+              size="sm"
+              className="flex-1 h-10 rounded-xl"
+              onPress={() => setHideEmpty(!hideEmpty)}
+              label={t('warehouse.stockOpname.difference')}
+              leftIcon={<Filter size={12} color={hideEmpty ? "#fff" : colors.primary} />}
+            />
+            <Button
+              variant={showSearch ? 'default' : 'outline'}
+              size="sm"
+              className="flex-1 h-10 rounded-xl"
+              onPress={() => setShowSearch(!showSearch)}
+              label={t('general.search')}
+              leftIcon={<Search size={12} color={showSearch ? "#fff" : colors.primary} />}
+            />
           </View>
         )}
 
-        {/* Row 2: Product Select - Hide when editing to avoid confusion */}
+        {/* Unified Quick Search Bar - The Primary Interaction Point */}
         {status === 0 && !isEdit && (
-          <View className="px-4 pb-3">
-            <TouchableOpacity
-              onPress={() => {
-                setIsEdit(false);
-                setEditingId(null);
-                setShowProductModal(true);
-              }}
-              className="flex-row items-center h-12 bg-primary/50 rounded-xl px-4 border border-primary/20 shadow-sm"
-            >
-              <Search size={18} color={colors.primary} />
-              <Text
-                className="text-foreground font-medium flex-1 ml-3"
-                numberOfLines={1}
-              >
-                {selectedProduct
-                  ? selectedProduct.name
-                  : t('warehouse.stockOpname.searchProductPlaceholder')}
-              </Text>
-              {selectedProduct ? (
-                <TouchableOpacity onPress={() => resetForm()} className="p-1">
-                  <X size={18} color={colors.primary} />
-                </TouchableOpacity>
-              ) : (
-                <ChevronDown size={18} color={colors.primary} />
-              )}
-            </TouchableOpacity>
+          <View className="px-4 pb-4">
+            <View className="relative">
+              <Input
+                placeholder={t('warehouse.stockOpname.searchProductPlaceholder')}
+                value={productSearch}
+                onChangeText={(v) => {
+                  setProductSearch(v);
+                  setShowSearchResults(v.length > 0);
+                }}
+                onFocus={() => productSearch.length > 0 && setShowSearchResults(true)}
+                className="h-14 rounded-2xl bg-secondary border-input"
+                leftIcon={<Search size={20} color={colors.primary} className="opacity-60" />}
+                rightIcon={productSearch ? (
+                  <TouchableOpacity onPress={() => resetForm()}>
+                    <X size={18} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                ) : null}
+              />
+            </View>
           </View>
         )}
       </View>
 
-      {/* Selected Product Inputs - Appears when product is selected */}
-      {status === 0 && selectedProduct && (
-        <View className="bg-card border-b border-border p-4 shadow-sm">
-          <View className="flex-row items-center justify-between mb-3">
-            <Text
-              className="font-bold text-primary flex-1 mr-2"
-              numberOfLines={1}
+      {/* Main Content Area */}
+      <View className="flex-1">
+        {/* Instant Search Results Overlay */}
+        {showSearchResults && status === 0 && (
+          <View className="absolute top-0 left-0 right-0 bottom-0 bg-background z-50">
+            <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
+              <View className="px-4 py-2 bg-secondary/5 flex-row items-center justify-between">
+                <Text className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                  {t('warehouse.stockOpname.selectProduct')}
+                </Text>
+                {isSyncingAll && (
+                  <View className="animate-pulse">
+                    <Text className="text-[10px] text-primary font-bold">
+                      SYNCING DATABASE...
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {products.length === 0 && !isSyncingAll ? (
+                <View className="py-20 items-center justify-center">
+                  <Search size={40} color={colors.mutedForeground} className="opacity-20 mb-4" />
+                  <Text className="text-muted-foreground font-bold">No products found</Text>
+                  {!isOffline && (
+                    <TouchableOpacity
+                      onPress={() => syncAllProducts()}
+                      className="mt-4 px-4 py-2 bg-primary rounded-xl"
+                    >
+                      <Text className="text-white text-xs font-bold">Sync Full Database</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                products.map(prod => {
+                  const source = getProductSource(prod.id);
+                  return (
+                    <TouchableOpacity
+                      key={prod.id}
+                      onPress={() => {
+                        setSelectedProduct(prod);
+                        setProductSearch(prod.name);
+                        setShowSearchResults(false);
+                        Keyboard.dismiss();
+                      }}
+                      className="px-4 py-3 border-b border-border/50 flex-row items-center justify-between active:bg-primary/5"
+                    >
+                      <View className="flex-1 mr-4">
+                        <View className="flex-row items-center flex-wrap gap-1.5">
+                          <Text className="font-bold text-foreground text-sm flex-1">{prod.name}</Text>
+                          {source && (
+                            <View className={cn("px-1.5 py-0.5 rounded-md", source === 'PKP' ? 'bg-yellow-500/10' : 'bg-blue-500/10')}>
+                              <Text className={cn("text-[8px] font-black uppercase", source === 'PKP' ? 'text-yellow-600' : 'text-blue-600')}>
+                                {source}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+              <View className="h-40" />
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Selected Product Quantity Input Card */}
+        {status === 0 && selectedProduct && (
+          <View className="bg-card border-b border-border shadow-2xl p-5 z-40">
+            <View className="flex-row items-center justify-between mb-5">
+              <View className="flex-1 mr-4">
+                <Text className="font-black text-primary text-lg" numberOfLines={2}>{selectedProduct.name}</Text>
+                <View className="flex-row items-center mt-1">
+                  <View className="bg-primary/10 px-2 py-0.5 rounded-md mr-2">
+                    <Text className="text-[9px] font-black text-primary uppercase">
+                      {isEdit ? t('element.editing') : t('element.adding')}
+                    </Text>
+                  </View>
+                  <Text className="text-xs text-muted-foreground">
+                    {t('element.stock')}: {isOffline ? '--' : formatSplitStock(Number(selectedProduct.stock || 0), selectedProduct)}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={resetForm} className="p-2 bg-secondary/10 rounded-full">
+                <X size={20} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            <View className="flex-row flex-wrap gap-3 mb-6">
+              {[1, 2, 3, 4].map(num => {
+                const unit = selectedProduct[`Unit${num === 1 ? '' : num}` as keyof Product];
+                if (!unit && num > 1) return null;
+                return (
+                  <View key={num} className="flex-1 min-w-[75px]">
+                    <Text className="text-[10px] font-black text-muted-foreground uppercase mb-1.5 ml-1 tracking-tighter">{String(unit)}</Text>
+                    <Input
+                      ref={num === 1 ? qtyInputRef : undefined}
+                      keyboardType="numeric"
+                      selectTextOnFocus
+                      value={currentQty[`qty${num}` as keyof typeof currentQty] === 0 ? '' : currentQty[`qty${num}` as keyof typeof currentQty].toString()}
+                      onChangeText={v => setCurrentQty({ ...currentQty, [`qty${num}`]: Number(v) || 0 })}
+                      placeholder="0"
+                      className="h-16 text-center font-black text-xl rounded-2xl bg-muted/30 border-input"
+                    />
+                  </View>
+                );
+              })}
+            </View>
+
+            <Button
+              label={isEdit ? t('element.updateItem') : t('element.addItemToList')}
+              onPress={isEdit ? updateItem : addItem}
+              className="w-full h-14 rounded-2xl shadow-lg shadow-primary/30"
+              labelClasses="font-black uppercase tracking-widest"
+            />
+          </View>
+        )}
+
+        {/* Main List */}
+        <ScrollView
+          ref={scrollViewRef}
+          className="flex-1"
+          contentContainerStyle={{ padding: 16 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Offline & Sync Status Banners */}
+          {isOffline && (
+            <View className="mb-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl flex-row items-center justify-center">
+              <Cloud size={16} color="#f97316" className="mr-2" />
+              <Text className="text-orange-600 font-bold text-sm">
+                {t('element.offline')} • {t('element.showingCachedData')}
+              </Text>
+            </View>
+          )}
+
+          {!isOffline && queue.length > 0 && (
+            <TouchableOpacity
+              onPress={() => processQueue()}
+              disabled={isSyncing}
+              className="mb-4 p-4 bg-primary/10 border border-primary/30 rounded-2xl flex-row items-center justify-between"
             >
-              {selectedProduct.name}
-            </Text>
-            <View className="flex-row gap-2">
-              <Button
-                label={isEdit ? t('element.update') : t('element.add')}
-                onPress={isEdit ? updateItem : addItem}
-                size="sm"
-                className="h-10 min-w-[90px]"
-              />
-              <Button
-                label={t('element.cancel')}
-                variant="outline"
-                onPress={() => {
-                  resetForm();
-                  setIsEdit(false);
-                  setEditingId(null);
-                }}
-                size="sm"
-                className="h-10 min-w-[90px]"
-              />
-            </View>
-          </View>
-
-          <View className="flex-row gap-2">
-            <View className="flex-1">
-              <Input
-                label={selectedProduct.Unit}
-                keyboardType="numeric"
-                selectTextOnFocus
-                value={currentQty.qty1.toString()}
-                onChangeText={v =>
-                  setCurrentQty({ ...currentQty, qty1: Number(v) || 0 })
-                }
-                className="h-10 text-center"
-              />
-            </View>
-            {selectedProduct.Unit2 && (
-              <View className="flex-1">
-                <Input
-                  label={selectedProduct.Unit2}
-                  keyboardType="numeric"
-                  selectTextOnFocus
-                  value={currentQty.qty2.toString()}
-                  onChangeText={v =>
-                    setCurrentQty({ ...currentQty, qty2: Number(v) || 0 })
-                  }
-                  className="h-10 text-center"
-                />
+              <View className="flex-row items-center">
+                <RefreshCw size={18} color={colors.primary} className={cn("mr-3", isSyncing && "animate-spin")} />
+                <View>
+                  <Text className="text-primary font-bold text-sm">{t('element.pendingActions')} ({queue.length})</Text>
+                  <Text className="text-primary/60 text-[10px] uppercase font-black">{isSyncing ? 'Syncing...' : t('element.syncNow')}</Text>
+                </View>
               </View>
-            )}
-            {selectedProduct.Unit3 && (
-              <View className="flex-1">
-                <Input
-                  label={selectedProduct.Unit3}
-                  keyboardType="numeric"
-                  selectTextOnFocus
-                  value={currentQty.qty3.toString()}
-                  onChangeText={v =>
-                    setCurrentQty({ ...currentQty, qty3: Number(v) || 0 })
-                  }
-                  className="h-10 text-center"
-                />
-              </View>
-            )}
-            {selectedProduct.Unit4 && (
-              <View className="flex-1">
-                <Input
-                  label={selectedProduct.Unit4}
-                  keyboardType="numeric"
-                  selectTextOnFocus
-                  value={currentQty.qty4.toString()}
-                  onChangeText={v =>
-                    setCurrentQty({ ...currentQty, qty4: Number(v) || 0 })
-                  }
-                  className="h-10 text-center"
-                />
-              </View>
-            )}
-          </View>
-        </View>
-      )}
+              <ChevronDown size={16} color={colors.primary} className="-rotate-90 opacity-50" />
+            </TouchableOpacity>
+          )}
 
-      {/* Status Indicator (below header info) */}
-      {status === 1 && (
-        <View className="bg-green-500/10 border-b border-green-500/20 px-4 py-2 flex-row items-center">
-          <CheckCircle size={14} color="#16a34a" className="mr-2" />
-          <Text className="text-green-700 font-bold text-xs uppercase tracking-wider">
-            {t('warehouse.stockOpname.approvedMode')}
-          </Text>
-        </View>
-      )}
-
-      <ScrollView
-        ref={scrollViewRef}
-        className="flex-1 px-4 pt-4"
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Search Filter for list */}
-        {showSearch && (
-          <View className="mb-4">
-            <View className="bg-secondary/20 rounded-xl px-3 flex-row items-center h-10">
-              <Search size={16} color={colors.mutedForeground} />
+          {/* List Search Filter */}
+          {showSearch && (
+            <View className="mb-4">
               <Input
                 placeholder={t('warehouse.stockOpname.filterListedItems')}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                className="flex-1 bg-transparent border-0 h-10 px-2"
+                className="h-11 bg-muted/50 border-0 rounded-xl"
+                leftIcon={<Search size={16} color={colors.mutedForeground} />}
               />
-              {searchQuery ? (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <X size={16} color={colors.mutedForeground} />
-                </TouchableOpacity>
-              ) : null}
             </View>
-          </View>
-        )}
+          )}
 
-        {/* Item List */}
-        {filteredItems.map((item, index) => {
-          const source = getProductSource(item.product_id);
-          const diffValue = getDifference(item);
-          const sysStockValue =
-            item.sys_stock !== undefined
-              ? Number(item.sys_stock)
-              : getSystemStock(item.product_id);
-          const totalPhys = calculateTotal(item);
+          {/* The Actual List of Items */}
+          {filteredItems.length === 0 ? (
+            <View className="py-20 items-center justify-center opacity-30">
+              <FileText size={64} color={colors.mutedForeground} />
+              <Text className="mt-4 font-bold text-muted-foreground">{t('general.noData')}</Text>
+            </View>
+          ) : (
+            filteredItems.map((item, index) => {
+              const source = getProductSource(item.product_id);
+              const diffValue = getDifference(item);
+              const sysValue = item.sys_stock !== undefined ? Number(item.sys_stock) : getSystemStock(item.product_id);
+              const totalPhys = calculateTotal(item);
 
-          const prod = {
-            id: item.product_id,
-            name: item.product_name,
-            Unit: item.unit1 || '',
-            Unit2: item.unit2,
-            Unit3: item.unit3,
-            Unit4: item.unit4,
-            Rat1: item.ratio1,
-            Rat2: item.ratio2,
-            Rat3: item.ratio3,
-            Rat4: item.ratio4,
-          };
+              const prodInfo = {
+                id: item.product_id,
+                name: item.product_name || 'Unknown',
+                Unit: item.unit1 || '', Unit2: item.unit2, Unit3: item.unit3, Unit4: item.unit4,
+                Rat1: item.ratio1 || 1, Rat2: item.ratio2 || 1, Rat3: item.ratio3 || 1, Rat4: item.ratio4 || 1,
+              };
 
-          return (
-            <View
-              key={item.id}
-              className="flex-row items-center mb-2 bg-card p-3 rounded-lg border border-border/50"
-            >
-              <Text className="text-muted-foreground mr-3 w-6 text-center font-bold">
-                {index + 1}
-              </Text>
-              <View className="flex-1">
-                <TouchableOpacity
-                  onPress={() => {
-                    const fullProd =
-                      products.find(p => p.id === item.product_id) || prod;
-                    setStockDetailProduct(fullProd as Product);
-                    setShowStockDetail(true);
-                  }}
-                  className="active:opacity-60"
-                >
-                  <Text
-                    className={`font-bold ${source === 'PKP' ? 'text-green-600' : 'text-blue-600'}`}
-                  >
-                    {item.product_name}
-                  </Text>
-                </TouchableOpacity>
-                <View className="mt-1">
-                  <Text className="text-[11px] text-muted-foreground">
-                    <Text className="font-bold">
-                      {t('warehouse.stockOpname.physical')}:
-                    </Text>{' '}
-                    {formatSplitStock(totalPhys, prod)}
-                  </Text>
-                  {showSystemStock && (
-                    <>
-                      <Text className="text-[11px] text-muted-foreground">
-                        <Text className="font-bold">
-                          {t('warehouse.stockOpname.system')}:
-                        </Text>{' '}
-                        {formatSplitStock(sysStockValue, prod)}
-                      </Text>
-                      <Text
-                        className={`text-[11px] font-bold ${diffValue < 0 ? 'text-red-600' : 'text-green-600'}`}
+              return (
+                <View key={item.id} className="mb-2 bg-card rounded-2xl border border-border/60 shadow-sm overflow-hidden">
+                  <View className="flex-row p-3 items-center">
+                    <View className="bg-secondary/40 h-8 w-8 rounded-xl items-center justify-center mr-2.5">
+                      <Text className="font-black text-muted-foreground text-[10px]">{index + 1}</Text>
+                    </View>
+                    <View className="flex-1">
+                      <TouchableOpacity
+                        onPress={() => {
+                          setStockDetailProduct(prodInfo as Product);
+                          setShowStockDetail(true);
+                        }}
                       >
-                        {t('warehouse.stockOpname.difference')}:{' '}
-                        {formatSplitStock(diffValue, prod)}
-                      </Text>
-                    </>
-                  )}
-                </View>
-              </View>
-              {status === 0 && (
-                <View className="flex-row gap-1">
-                  <Pressable
-                    onPress={() => startEdit(item)}
-                    className="p-2 bg-blue-500/10 rounded-full"
-                  >
-                    <Edit2 size={16} color="#3b82f6" />
-                  </Pressable>
-                  <Pressable
-                    onPress={() => deleteItem(item.id)}
-                    className="p-2 bg-destructive/10 rounded-full"
-                  >
-                    <Trash2 size={16} color={colors.destructive} />
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          );
-        })}
+                        <View className="flex-row items-center flex-wrap gap-1.5">
+                          <Text className="font-bold text-foreground text-[13px] leading-tight" numberOfLines={2}>
+                            {item.product_name}
+                          </Text>
+                          {source && (
+                            <View className={cn("px-1.5 py-0.5 rounded-md", source === 'PKP' ? 'bg-yellow-500/10' : 'bg-blue-500/10')}>
+                              <Text className={cn("text-[8px] font-black uppercase", source === 'PKP' ? 'text-yellow-600' : 'text-blue-600')}>
+                                {source}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                    {status === 0 && (
+                      <View className="flex-row gap-1.5">
+                        <TouchableOpacity onPress={() => startEdit(item)} className="p-2.5 bg-blue-500/10 rounded-xl">
+                          <Edit2 size={14} color="#3b82f6" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => deleteItem(item.id)} className="p-2.5 bg-red-500/10 rounded-xl">
+                          <Trash2 size={14} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
 
-        <View style={{ height: insets.bottom + 96 }} />
-      </ScrollView>
+                  <View className="flex-row bg-secondary/5 px-2 py-2 border-t border-border/30">
+                    <View className="flex-1 items-center">
+                      <Text className="text-[8px] font-black text-muted-foreground uppercase opacity-60 mb-0.5">{t('warehouse.stockOpname.physical')}</Text>
+                      <Text className="text-[11px] font-black text-foreground">{formatSplitStock(totalPhys, prodInfo)}</Text>
+                    </View>
+                    {showSystemStock && (
+                      <>
+                        <View className="flex-1 px-1 border-l border-border/30 items-center">
+                          <Text className="text-[8px] font-black text-muted-foreground uppercase opacity-60 mb-0.5">{t('warehouse.stockOpname.system')}</Text>
+                          <Text className="text-[11px] font-bold text-muted-foreground/80">{formatSplitStock(sysValue, prodInfo)}</Text>
+                        </View>
+                        <View className="flex-1 pl-1 border-l border-border/30 items-center">
+                          <Text className="text-[8px] font-black text-muted-foreground uppercase opacity-60 mb-0.5">{t('warehouse.stockOpname.difference')}</Text>
+                          <Text className={cn("text-[11px] font-black", diffValue < 0 ? 'text-red-500' : 'text-green-500')}>
+                            {diffValue > 0 ? '+' : ''}{formatSplitStock(diffValue, prodInfo)}
+                          </Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                </View>
+              );
+            })
+          )}
+          <View className="h-40" />
+        </ScrollView>
+      </View>
 
-      {/* Date & Notes Modal */}
-      <Modal
-        visible={showDateModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowDateModal(false)}
-      >
+      {/* Floating Action Buttons */}
+      <View className="absolute right-6 flex-row gap-3" style={{ bottom: insets.bottom + 24 }}>
+        {Boolean(_invoice && status === 0) && (
+          <TouchableOpacity onPress={handleApprove} className="bg-green-600 p-5 rounded-full shadow-2xl items-center justify-center">
+            <CheckCircle size={28} color="#fff" />
+          </TouchableOpacity>
+        )}
+        {Boolean(_invoice && status === 1) && (
+          <TouchableOpacity onPress={handleOpen} className="bg-yellow-600 p-5 rounded-full shadow-2xl items-center justify-center">
+            <Unlock size={28} color="#fff" />
+          </TouchableOpacity>
+        )}
+        {status === 0 && (
+          <TouchableOpacity onPress={handleSave} className="bg-primary p-5 rounded-full shadow-2xl items-center justify-center">
+            <Save size={28} color="#fff" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Modals */}
+      <Modal visible={showDateModal} transparent animationType="slide" onRequestClose={() => setShowDateModal(false)}>
         <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-background rounded-t-3xl p-6 shadow-xl">
-            <View className="flex-row items-center justify-between mb-6">
-              <Text className="text-lg font-bold text-foreground">
-                {t('warehouse.stockOpname.opnameDetails')}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setShowDateModal(false)}
-                className="p-2"
-              >
+          <View className="bg-background rounded-t-[40px] p-8 shadow-2xl">
+            <View className="flex-row items-center justify-between mb-8">
+              <Text className="text-2xl font-black text-foreground">{t('warehouse.stockOpname.opnameDetails')}</Text>
+              <TouchableOpacity onPress={() => setShowDateModal(false)} className="p-2 bg-secondary/10 rounded-full">
                 <X size={24} color={colors.foreground} />
               </TouchableOpacity>
             </View>
-
-            <View className="mb-4">
-              <View className="flex-row items-center mb-1.5 ml-1">
-                <Calendar size={14} color={colors.primary} className="mr-2" />
-                <Text className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  {t('warehouse.stockOpname.transactionDate')}
-                </Text>
-              </View>
-              <DatePicker
-                value={date}
-                onChange={setDate}
-                placeholder={t('warehouse.stockOpname.transactionDate')}
-              />
-            </View>
             <View className="mb-6">
-              <View className="flex-row items-center mb-1.5 ml-1">
-                <FileText size={14} color={colors.primary} className="mr-2" />
-                <Text className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  {t('warehouse.stockOpname.notesRemarks')}
-                </Text>
-              </View>
+              <Text className="text-[10px] font-black text-muted-foreground uppercase mb-2 ml-1">{t('warehouse.stockOpname.transactionDate')}</Text>
+              <DatePicker value={date} onChange={setDate} />
+            </View>
+            <View className="mb-10">
+              <Text className="text-[10px] font-black text-muted-foreground uppercase mb-2 ml-1">{t('warehouse.stockOpname.notesRemarks')}</Text>
               <Input
                 value={notes}
                 onChangeText={setNotes}
                 placeholder={t('warehouse.stockOpname.addNotesPlaceholder')}
-                editable={status === 0}
-                className="bg-secondary/10 border-0 h-12 px-4 rounded-xl text-sm"
                 multiline
+                className="min-h-[100px] text-base bg-muted/30 border border-input rounded-2xl px-4"
               />
             </View>
-
             <Button
               label={t('warehouse.stockOpname.saveDetails')}
               onPress={() => setShowDateModal(false)}
-              className="w-full h-12 rounded-xl"
+              className="h-16 rounded-3xl shadow-xl shadow-primary/20"
+              labelClasses="font-black uppercase tracking-[2px]"
             />
           </View>
         </View>
       </Modal>
 
-      {/* Product Selection Modal */}
-      <Modal
-        visible={showProductModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowProductModal(false)}
-      >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-background rounded-t-3xl max-h-[80%]">
-            <View className="p-4 border-b border-border flex-row items-center justify-between">
-              <Text className="text-foreground font-bold text-lg">
-                {t('warehouse.stockOpname.selectProduct')}
-              </Text>
-              <Pressable onPress={() => setShowProductModal(false)}>
-                <X size={24} color={colors.foreground} />
-              </Pressable>
-            </View>
-            <View className="p-4">
-              <Input
-                placeholder={t(
-                  'warehouse.stockOpname.searchProductPlaceholder',
-                )}
-                value={productSearch}
-                onChangeText={setProductSearch}
-              />
-            </View>
-            <ScrollView className="px-4">
-              {productsLoading ? (
-                <View className="py-20 items-center justify-center">
-                  <Loading isLoading={true} />
-                  <Text className="mt-4 text-muted-foreground">
-                    {t('warehouse.stockOpname.searchingProducts')}
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  {products.length === 0 ? (
-                    <View className="py-20 items-center justify-center">
-                      <Search size={48} color={colors.border} />
-                      <Text className="mt-4 text-muted-foreground">
-                        {t('warehouse.stockOpname.noProductsFound')}
-                      </Text>
-                    </View>
-                  ) : (
-                    products.map(prod => (
-                      <Pressable
-                        key={prod.id}
-                        className="p-4 border-b border-border active:bg-secondary/50"
-                        onPress={() => {
-                          setSelectedProduct(prod);
-                          setProductSearch(prod.name);
-                          setShowProductModal(false);
-                        }}
-                      >
-                        <View className="flex-row justify-between items-center">
-                          <View className="flex-1 mr-4">
-                            <Text
-                              className="text-foreground font-bold"
-                              numberOfLines={1}
-                            >
-                              {prod.name}
-                            </Text>
-                            <Text className="text-[10px] text-muted-foreground mt-1">
-                              {formatSplitStock(Number(prod.stock || 0), prod)}
-                            </Text>
-                          </View>
-                          <ChevronDown
-                            size={16}
-                            color={colors.mutedForeground}
-                          />
-                        </View>
-                      </Pressable>
-                    ))
-                  )}
-                </>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
       {/* Stock Detail Modal */}
-      <Modal
-        visible={showStockDetail}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowStockDetail(false)}
-      >
+      <Modal visible={showStockDetail} transparent animationType="slide" onRequestClose={() => setShowStockDetail(false)}>
         <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-card rounded-t-3xl overflow-hidden shadow-xl max-h-[85%]">
-            <View className="p-4 border-b border-border flex-row justify-between items-center bg-secondary/10">
-              <Text className="text-lg font-bold text-foreground">
-                {t('warehouse.stockOpname.stockDetails')}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setShowStockDetail(false)}
-                className="p-2"
-              >
+          <View className="bg-card rounded-t-3xl overflow-hidden shadow-2xl max-h-[85%]">
+            <View className="p-6 border-b border-border flex-row justify-between items-center">
+              <View>
+                <Text className="text-xl font-black text-foreground">{t('warehouse.stockOpname.stockDetails')}</Text>
+                <Text className="text-primary font-bold text-sm mt-0.5">{stockDetailProduct?.name}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowStockDetail(false)} className="p-2 bg-secondary/10 rounded-full">
                 <X size={24} color={colors.foreground} />
               </TouchableOpacity>
             </View>
-
-            <View className="p-4">
-              <Text className="text-primary font-bold text-lg mb-4">
-                {stockDetailProduct?.name}
-              </Text>
-
-              {/* Table Header */}
-              <View className="flex-row border-b border-border pb-2 mb-2 bg-secondary/5 px-2">
-                <Text className="flex-[2] font-bold text-muted-foreground text-xs">
-                  {t('warehouse.stockOpname.warehouse')}
-                </Text>
-                <Text className="flex-[3] font-bold text-muted-foreground text-xs text-center">
-                  {t('element.stock')}
-                </Text>
-                <Text className="flex-1 font-bold text-muted-foreground text-xs text-right">
-                  {t('warehouse.stockOpname.source')}
-                </Text>
-              </View>
-
-              <ScrollView className="max-h-[400px]">
-                {warehouseLoading ? (
-                  <Loading isLoading={true} />
-                ) : !stockByWarehouse || stockByWarehouse.length === 0 ? (
-                  <View className="py-10 items-center">
-                    <Text className="text-muted-foreground mb-4">
-                      {t('warehouse.stockOpname.noStockInfo')}
+            <ScrollView className="p-4 max-h-[500px]">
+              {warehouseLoading ? <Loading isLoading={true} /> : !stockByWarehouse || stockByWarehouse.length === 0 ? (
+                <View className="py-20 items-center">
+                  <Text className="text-muted-foreground mb-6 font-bold">{t('warehouse.stockOpname.noStockInfo')}</Text>
+                  <Button label={t('warehouse.stockOpname.retry')} onPress={() => refetchWarehouseData()} variant="outline" />
+                </View>
+              ) : (
+                stockByWarehouse.map((wh: any, idx: number) => (
+                  <View key={idx} className="flex-row border-b border-border/50 py-4 px-2 items-center">
+                    <View className="flex-[2]">
+                      <Text className="text-sm text-foreground font-black">{wh.Descr}</Text>
+                      <Text className={cn("text-[10px] font-black uppercase mt-0.5", wh.Source === 'PKP' ? 'text-yellow-600' : 'text-blue-600')}>{wh.Source}</Text>
+                    </View>
+                    <Text className="flex-[3] text-sm text-right font-bold text-foreground">
+                      {formatSplitStock(Number(wh.Stock), stockDetailProduct as Product)}
                     </Text>
-                    <Button
-                      label={t('warehouse.stockOpname.retry')}
-                      onPress={() => refetchWarehouseData()}
-                      size="sm"
-                      variant="outline"
-                    />
                   </View>
-                ) : (
-                  stockByWarehouse?.map((wh: any, idx: number) => {
-                    const diff = Number(wh.Stock);
-                    return (
-                      <View
-                        key={idx}
-                        className="flex-row border-b border-border/50 py-3 px-2"
-                      >
-                        <Text className="flex-[2] text-xs text-foreground font-medium">
-                          {wh.Descr}
-                        </Text>
-                        <Text className="flex-[3] text-[11px] text-center text-foreground">
-                          {formatSplitStock(
-                            diff,
-                            stockDetailProduct as Product,
-                          )}
-                        </Text>
-                        <Text
-                          className={`flex-1 text-xs text-right font-bold ${wh.Source === 'PKP' ? 'text-yellow-600' : 'text-blue-600'}`}
-                        >
-                          {wh.Source}
-                        </Text>
-                      </View>
-                    );
-                  })
-                )}
-              </ScrollView>
-            </View>
-
-            <View className="p-4 bg-secondary/5 px-6 pb-8">
-              <Button
-                label={t('warehouse.stockOpname.closeDetails')}
-                onPress={() => setShowStockDetail(false)}
-                className="w-full h-12 rounded-xl"
-              />
+                ))
+              )}
+            </ScrollView>
+            <View className="p-6 pb-10">
+              <Button label={t('general.close')} onPress={() => setShowStockDetail(false)} className="rounded-2xl" />
             </View>
           </View>
         </View>
       </Modal>
-
-      {/* Floating Action Buttons */}
-      <View
-        className="absolute right-6 flex-row gap-3"
-        style={{ bottom: insets.bottom + 24 }}
-      >
-        {Boolean(_invoice && status === 0) && (
-          <Pressable
-            onPress={handleApprove}
-            className="bg-green-600 p-4 rounded-full shadow-lg active:scale-95 items-center justify-center"
-            style={{ elevation: 8 }}
-          >
-            <CheckCircle size={24} color="#ffffff" />
-          </Pressable>
-        )}
-
-        {Boolean(_invoice && status === 1) && (
-          <Pressable
-            onPress={handleOpen}
-            className="bg-yellow-600 p-4 rounded-full shadow-lg active:scale-95 items-center justify-center"
-            style={{ elevation: 8 }}
-          >
-            <Unlock size={24} color="#ffffff" />
-          </Pressable>
-        )}
-
-        {status === 0 && (
-          <Pressable
-            onPress={handleSave}
-            className="bg-primary p-4 rounded-full shadow-lg active:scale-95 items-center justify-center"
-            style={{ elevation: 8 }}
-          >
-            <Save size={24} color="#ffffff" />
-          </Pressable>
-        )}
-      </View>
 
       {(invoiceLoading || stockLoading) && <Loading isLoading={true} />}
     </View>

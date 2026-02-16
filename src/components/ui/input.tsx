@@ -10,14 +10,15 @@ interface InputProps extends TextInputProps {
   rightIcon?: React.ReactNode;
 }
 
-function Input({
+const Input = React.forwardRef<TextInput, InputProps>(({
   className,
   label,
   error,
   leftIcon,
   rightIcon,
+  multiline,
   ...props
-}: InputProps) {
+}, ref) => {
   return (
     <View className="flex flex-col gap-2 space-y-2 w-full">
       {label && (
@@ -32,13 +33,17 @@ function Input({
           </View>
         )}
         <TextInput
+          ref={ref}
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
           className={cn(
-            'flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground active:border-primary',
-            leftIcon && 'pl-10',
-            rightIcon && 'pr-10',
+            'flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground active:border-primary',
+            !multiline && 'h-12',
+            leftIcon && 'pl-12',
+            rightIcon && 'pr-12',
             error && 'border-destructive',
             className,
-          )}
+          ) || ''}
           placeholderTextColor="#a1a1aa"
           {...props}
         />
@@ -55,6 +60,8 @@ function Input({
       )}
     </View>
   );
-}
+});
+
+Input.displayName = 'Input';
 
 export { Input };

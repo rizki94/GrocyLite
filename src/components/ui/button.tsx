@@ -2,6 +2,7 @@ import React from 'react';
 import {
   TouchableOpacity,
   Text,
+  View,
   type TouchableOpacityProps,
 } from 'react-native';
 import { cva, type VariantProps } from 'class-variance-authority';
@@ -55,6 +56,8 @@ interface ButtonProps
   labelClasses?: string;
   children?: React.ReactNode;
   className?: string;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
 }
 
 function Button({
@@ -64,6 +67,8 @@ function Button({
   label,
   labelClasses,
   children,
+  leftIcon,
+  rightIcon,
   ...props
 }: ButtonProps) {
   return (
@@ -72,6 +77,7 @@ function Button({
       activeOpacity={0.7}
       {...props}
     >
+      {leftIcon && <View className="mr-2">{leftIcon}</View>}
       {label ? (
         <Text
           className={cn(
@@ -83,6 +89,7 @@ function Button({
       ) : (
         children
       )}
+      {rightIcon && <View className="ml-2">{rightIcon}</View>}
     </TouchableOpacity>
   );
 }

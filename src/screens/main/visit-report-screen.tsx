@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   Camera,
   MapPin,
+  RefreshCw,
+  Cloud,
 } from 'lucide-react-native';
 import Geolocation from 'react-native-geolocation-service';
 import { launchCamera } from 'react-native-image-picker';
@@ -26,10 +28,13 @@ import { Loading } from '../../components/ui/loading';
 import { useFetch } from '../../hooks/use-fetch';
 import { useTranslation } from 'react-i18next';
 
+import { useOffline } from '../../hooks/use-offline';
+
 export function VisitReportScreen({ navigation }: any) {
   const { t } = useTranslation();
   const colors = useThemeColor();
   const { apiClient } = useConnection();
+  const { isOffline, addToQueue, queue, processQueue, isSyncing } = useOffline();
   const [loading, setLoading] = useState(false);
   const [selectedContact, setSelectedContact] = useState<any>(null);
   const [notes, setNotes] = useState('');
@@ -38,7 +43,7 @@ export function VisitReportScreen({ navigation }: any) {
   const [location, setLocation] = useState<any>(null);
 
   const { data: contacts, isLoading: loadingContacts } = useFetch(
-    'api/contact/customer/active',
+    '/api/contact/customer/active',
   );
 
   const filteredContacts = React.useMemo(() => {
@@ -87,16 +92,50 @@ export function VisitReportScreen({ navigation }: any) {
     try {
       setLoading(true);
 
+      if (!selectedContact) {
+        Alert.alert(t('element.error'), t('attendance.selectCustomer'));
+        setLoading(false);
+        return;
+      }
+
       // Get current location
       const coords = location || (await getLocation());
+
+      if (isOffline) {
+        const offlineData: any = {
+          latitude: String(coords.latitude),
+          longitude: String(coords.longitude),
+          notes: notes || undefined,
+          contact_id: String(selectedContact.id),
+        };
+
+        if (photo) {
+          offlineData.photo = {
+            uri: photo.uri,
+            type: photo.type || 'image/jpeg',
+            name: photo.fileName || `visit_${Date.now()}.jpg`,
+          };
+        }
+
+        await addToQueue('/api/attendance/visit', 'POST', offlineData, { 'Content-Type': 'multipart/form-data' }, 'Visit Report', true);
+
+        Alert.alert(t('element.success'), t('element.savedOffline'), [
+          { text: t('general.ok'), onPress: () => navigation.goBack() },
+        ]);
+        setLoading(false);
+        return;
+      }
+
+      if (!selectedContact) {
+        Alert.alert(t('element.error'), t('attendance.selectCustomer'));
+        setLoading(false);
+        return;
+      }
 
       const formData = new FormData();
       formData.append('latitude', String(coords.latitude));
       formData.append('longitude', String(coords.longitude));
-
-      if (selectedContact?.id) {
-        formData.append('contact_id', String(selectedContact.id));
-      }
+      formData.append('contact_id', String(selectedContact.id));
 
       if (notes) {
         formData.append('notes', notes);
@@ -144,6 +183,44 @@ export function VisitReportScreen({ navigation }: any) {
   return (
     <AppLayout title={t('attendance.reportVisit')} showBack>
       <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
+        {/* Offline Banner */}
+        {isOffline && (
+          <View className="mb-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl">
+            <Text className="text-orange-600 font-bold text-sm text-center">
+              📡 {t('element.offline')} - {t('element.showingCachedData')}
+            </Text>
+          </View>
+        )}
+
+        {/* Sync Queue Banner */}
+        {!isOffline && queue.length > 0 && (
+          <TouchableOpacity
+            onPress={() => processQueue()}
+            disabled={isSyncing}
+            className="mb-4 p-4 bg-primary/10 border border-primary/30 rounded-2xl flex-row items-center justify-between"
+          >
+            <View className="flex-row items-center">
+              <View className="mr-3">
+                <Cloud size={20} color={colors.primary} />
+              </View>
+              <View>
+                <Text className="text-primary font-bold text-sm">
+                  {t('element.pendingActions')} ({queue.length})
+                </Text>
+                <Text className="text-primary/60 text-[10px] uppercase font-bold tracking-tighter">
+                  {isSyncing ? 'Syncing...' : t('element.syncNow')}
+                </Text>
+              </View>
+            </View>
+            <View className={isSyncing ? 'animate-spin' : ''}>
+              <RefreshCw
+                size={18}
+                color={colors.primary}
+              />
+            </View>
+          </TouchableOpacity>
+        )}
+
         <Text className="text-sm font-bold text-muted-foreground uppercase mb-2 px-1">
           {t('attendance.selectCustomer')}
         </Text>

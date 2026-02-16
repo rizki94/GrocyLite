@@ -24,6 +24,7 @@ import { ConnectionError } from '../../components/connection-error';
 import moment from 'moment';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useOffline } from '../../hooks/use-offline';
 
 interface StockOpnameItem {
   date: string;
@@ -36,6 +37,7 @@ export function StockOpnameListScreen() {
   const navigation = useNavigation<any>();
   const colors = useThemeColor();
   const { apiClient } = useConnection();
+  const { isOffline } = useOffline();
 
   const [stockOpnames, setStockOpnames] = useState<StockOpnameItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -74,7 +76,7 @@ export function StockOpnameListScreen() {
           params.endDate = moment(endDate).format('YYYY-MM-DD');
         }
 
-        const response = await apiClient.get('api/stock_opname/list', {
+        const response = await apiClient.get('/api/stock_opname/list', {
           params,
         });
 
@@ -219,6 +221,13 @@ export function StockOpnameListScreen() {
 
       {/* List */}
       <View className="flex-1">
+        {isOffline && (
+          <View className="mx-4 mt-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl">
+            <Text className="text-orange-600 font-bold text-sm text-center">
+              📡 {t('element.offline')} - {t('element.showingCachedData')}
+            </Text>
+          </View>
+        )}
         {fetchError && stockOpnames.length === 0 ? (
           <ConnectionError onRetry={onRefresh} message={fetchError} />
         ) : (

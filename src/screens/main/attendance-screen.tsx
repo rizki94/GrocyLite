@@ -22,6 +22,8 @@ import {
   History,
   Navigation,
   User,
+  RefreshCw,
+  Cloud,
 } from 'lucide-react-native';
 import Geolocation from 'react-native-geolocation-service';
 import { launchCamera } from 'react-native-image-picker';
@@ -30,16 +32,24 @@ import moment from 'moment';
 import { Loading } from '../../components/ui/loading';
 import { useTranslation } from 'react-i18next';
 
+import { useOffline } from '../../hooks/use-offline';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export function AttendanceScreen({ navigation }: any) {
   const { t } = useTranslation();
   const colors = useThemeColor();
   const { apiClient } = useConnection();
+  const { isOffline, addToQueue, queue, processQueue, isSyncing } = useOffline();
   const [loading, setLoading] = useState(false);
   const [fetchingStatus, setFetchingStatus] = useState(true);
   const [attendance, setAttendance] = useState<any>(null);
   const [visits, setVisits] = useState<any[]>([]);
   const [location, setLocation] = useState<any>(null);
   const [selfie, setSelfie] = useState<any>(null);
+
+  const ATTENDANCE_CACHE_KEY = '@attendance_status';
+  const VISITS_CACHE_KEY = '@attendance_visits';
 
   const requestPermissions = async () => {
     if (Platform.OS === 'android') {
@@ -50,9 +60,9 @@ export function AttendanceScreen({ navigation }: any) {
         ]);
         return (
           granted['android.permission.ACCESS_FINE_LOCATION'] ===
-            PermissionsAndroid.RESULTS.GRANTED &&
+          PermissionsAndroid.RESULTS.GRANTED &&
           granted['android.permission.CAMERA'] ===
-            PermissionsAndroid.RESULTS.GRANTED
+          PermissionsAndroid.RESULTS.GRANTED
         );
       } catch (err) {
         console.warn(err);
@@ -65,9 +75,28 @@ export function AttendanceScreen({ navigation }: any) {
   const getStatus = useCallback(async () => {
     try {
       setFetchingStatus(true);
+
+      if (isOffline) {
+        // Load from cache when offline
+        const cachedAttendance = await AsyncStorage.getItem(ATTENDANCE_CACHE_KEY);
+        const cachedVisits = await AsyncStorage.getItem(VISITS_CACHE_KEY);
+
+        if (cachedAttendance) {
+          setAttendance(JSON.parse(cachedAttendance));
+        }
+        if (cachedVisits) {
+          setVisits(JSON.parse(cachedVisits));
+        }
+
+        setFetchingStatus(false);
+        return;
+      }
+
       const response = await apiClient.get('/api/attendance/status');
       if (response.data.status === 200) {
         setAttendance(response.data.data);
+        // Cache the attendance status
+        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(response.data.data));
 
         // If checked in, fetch today's visits
         if (response.data.data) {
@@ -79,15 +108,31 @@ export function AttendanceScreen({ navigation }: any) {
           });
           if (routeResponse.data.status === 200) {
             setVisits(routeResponse.data.data.visits || []);
+            // Cache visits
+            await AsyncStorage.setItem(VISITS_CACHE_KEY, JSON.stringify(routeResponse.data.data.visits || []));
           }
         }
       }
     } catch (error) {
       console.error('Failed to fetch attendance status', error);
+      // Try to load from cache on error
+      try {
+        const cachedAttendance = await AsyncStorage.getItem(ATTENDANCE_CACHE_KEY);
+        const cachedVisits = await AsyncStorage.getItem(VISITS_CACHE_KEY);
+
+        if (cachedAttendance) {
+          setAttendance(JSON.parse(cachedAttendance));
+        }
+        if (cachedVisits) {
+          setVisits(JSON.parse(cachedVisits));
+        }
+      } catch (e) {
+        console.error('Failed to load cached attendance', e);
+      }
     } finally {
       setFetchingStatus(false);
     }
-  }, [apiClient]);
+  }, [apiClient, isOffline]);
 
   const getCurrentLocation = () => {
     return new Promise((resolve, reject) => {
@@ -152,7 +197,7 @@ export function AttendanceScreen({ navigation }: any) {
           Alert.alert(
             t('attendance.locationError'),
             t('attendance.locationErrorContent') ||
-              'Could not get current location. Please try again.',
+            'Could not get current location. Please try again.',
           );
           setLoading(false);
           return;
@@ -169,6 +214,34 @@ export function AttendanceScreen({ navigation }: any) {
           type: selfie.type || 'image/jpeg',
           name: selfie.fileName || `selfie_${Date.now()}.jpg`,
         } as any);
+      }
+
+      if (isOffline) {
+        const offlineData = {
+          latitude: String(coords.latitude),
+          longitude: String(coords.longitude),
+          selfie: {
+            uri: selfie.uri,
+            type: selfie.type || 'image/jpeg',
+            name: selfie.fileName || `selfie_${Date.now()}.jpg`,
+          }
+        };
+
+        await addToQueue('/api/attendance/check-in', 'POST', offlineData, { 'Content-Type': 'multipart/form-data' }, 'Check In', true);
+
+        Alert.alert(t('element.success'), t('element.savedOffline'));
+        // Optimistic update
+        const newAttendance = {
+          check_in_time: new Date().toISOString(),
+          user_id: 0, // dummy
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        };
+        setAttendance(newAttendance);
+        // Cache the offline check-in state
+        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(newAttendance));
+        setLoading(false);
+        return;
       }
 
       const response = await apiClient.post(
@@ -202,6 +275,23 @@ export function AttendanceScreen({ navigation }: any) {
     try {
       setLoading(true);
       const coords: any = await getCurrentLocation();
+
+      if (isOffline) {
+        await addToQueue('/api/attendance/check-out', 'POST', {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }, {}, 'Check Out');
+        Alert.alert(t('element.success'), t('element.savedOffline'));
+        const updatedAttendance = {
+          ...attendance,
+          check_out_time: new Date().toISOString()
+        };
+        setAttendance(updatedAttendance);
+        // Cache the offline check-out state
+        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(updatedAttendance));
+        setLoading(false);
+        return;
+      }
 
       const response = await apiClient.post('/api/attendance/check-out', {
         latitude: coords.latitude,
@@ -258,6 +348,42 @@ export function AttendanceScreen({ navigation }: any) {
   return (
     <AppLayout title={t('attendance.title')} showBack>
       <ScrollView className="flex-1 p-4" showsVerticalScrollIndicator={false}>
+        {isOffline && (
+          <View className="mb-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl">
+            <Text className="text-orange-600 font-bold text-sm text-center">
+              📡 {t('element.offline')} - {t('element.showingCachedData')}
+            </Text>
+          </View>
+        )}
+
+        {/* Sync Queue Banner */}
+        {!isOffline && queue.length > 0 && (
+          <TouchableOpacity
+            onPress={() => processQueue()}
+            disabled={isSyncing}
+            className="mb-4 p-4 bg-primary/10 border border-primary/30 rounded-2xl flex-row items-center justify-between"
+          >
+            <View className="flex-row items-center">
+              <View className="mr-3">
+                <Cloud size={20} color={colors.primary} />
+              </View>
+              <View>
+                <Text className="text-primary font-bold text-sm">
+                  {t('element.pendingActions')} ({queue.length})
+                </Text>
+                <Text className="text-primary/60 text-[10px] uppercase font-bold tracking-tighter">
+                  {isSyncing ? 'Syncing...' : t('element.syncNow')}
+                </Text>
+              </View>
+            </View>
+            <View className={isSyncing ? 'animate-spin' : ''}>
+              <RefreshCw
+                size={18}
+                color={colors.primary}
+              />
+            </View>
+          </TouchableOpacity>
+        )}
         {!attendance ? (
           <View>
             <Card className="p-6 mb-6 items-center border-dashed border-2 border-primary/30">
@@ -368,7 +494,7 @@ export function AttendanceScreen({ navigation }: any) {
                 </Text>
               </TouchableOpacity>
 
-              {attendance.check_out_time ? (
+              {/* {attendance.check_out_time ? (
                 <View className="flex-1 bg-secondary/20 border border-border p-5 rounded-2xl items-center">
                   <Clock size={32} color={colors.mutedForeground} />
                   <Text className="text-muted-foreground font-bold mt-3 text-center">
@@ -379,21 +505,22 @@ export function AttendanceScreen({ navigation }: any) {
                     {moment(attendance.check_out_time).format('h:mm a')}
                   </Text>
                 </View>
-              ) : (
-                <TouchableOpacity
-                  onPress={handleCheckOut}
-                  disabled={loading}
-                  className="flex-1 bg-destructive/10 border border-destructive/20 p-5 rounded-2xl items-center shadow-sm"
-                >
-                  <Clock size={32} color={colors.destructive} />
-                  <Text className="text-destructive font-bold mt-3">
-                    {t('attendance.checkOut')}
-                  </Text>
-                  <Text className="text-destructive/60 text-[10px] mt-1 text-center">
-                    {t('attendance.endWorkDay')}
-                  </Text>
-                </TouchableOpacity>
-              )}
+              ) : ( */}
+
+              <TouchableOpacity
+                onPress={handleCheckOut}
+                disabled={loading}
+                className="flex border border-destructive/30 bg-destructive/5 p-5 rounded-2xl items-center"
+              >
+                <Clock size={32} color={colors.destructive} />
+                <Text className="text-destructive font-bold mt-3">
+                  {t('attendance.checkOut')}
+                </Text>
+                <Text className="text-destructive/60 text-[10px] mt-1 text-center">
+                  {t('attendance.endWorkDay')}
+                </Text>
+              </TouchableOpacity>
+              {/* )} */}
             </View>
 
             <Text className="text-lg font-bold text-foreground mb-4 px-1">
@@ -464,9 +591,10 @@ export function AttendanceScreen({ navigation }: any) {
               )}
             </Card>
           </View>
-        )}
-      </ScrollView>
+        )
+        }
+      </ScrollView >
       <Loading isLoading={loading} />
-    </AppLayout>
+    </AppLayout >
   );
 }
