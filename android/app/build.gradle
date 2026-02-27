@@ -99,9 +99,7 @@ android {
             manifestPlaceholders = [usesCleartextTraffic:"true"]
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // F-Droid will sign the APK with their own key
             manifestPlaceholders = [usesCleartextTraffic:"true"]
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
@@ -118,5 +116,5 @@ dependencies {
     } else {
         implementation jscFlavor
     }
-    implementation 'com.google.android.gms:play-services-location:21.0.1'
+    implementation 'androidx.core:core-ktx:1.10.1'
 }

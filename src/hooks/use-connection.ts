@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 
-const DEFAULT_URL = 'http://3b0502d02489.sn.mynetname.net:8001';
+const DEFAULT_URL = 'http://[IP_ADDRESS]';
 
 export const apiClient = axios.create({
   withCredentials: true,

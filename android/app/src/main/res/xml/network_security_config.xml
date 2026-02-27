@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  GrocyLite connects to a user-configured Grocy server which may be hosted
+  on a local network over HTTP. Cleartext traffic is required for this use case.
+  See: https://f-droid.org/docs/Inclusion_Policy/#network-security
+-->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
+            <certificates src="user" />
         </trust-anchors>
     </base-config>
 </network-security-config>
