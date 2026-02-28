@@ -1,0 +1,3 @@
+GrocyLite is a mobile client for Grocy, the open-source grocery & household management solution.
+
+Note: The app connects to a self-hosted Grocy instance which may operate over HTTP on a local network.
