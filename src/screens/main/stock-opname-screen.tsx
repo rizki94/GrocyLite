@@ -352,7 +352,7 @@ export function StockOpnameScreen() {
           sys_stock:
             item.sys_stock !== undefined
               ? item.sys_stock
-              : stock?.find((s: any) => s.PKey === item.product_id)?.Stock,
+              : (stock?.find((s: any) => s.PKey === item.product_id)?.Stock ?? 0),
         })),
       };
 
