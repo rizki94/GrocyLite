@@ -265,17 +265,15 @@ export function StockOpnameListScreen() {
       <Loading isLoading={isLoading && stockOpnames.length === 0} />
 
       {/* Floating Add Button */}
-      {!fetchError && (
-        <Pressable
-          className="absolute right-6 w-14 h-14 bg-primary rounded-full items-center justify-center shadow-lg active:scale-95"
-          style={{ elevation: 8, bottom: insets.bottom + 24 }}
-          onPress={() => {
-            navigation.navigate('StockOpnameDetail', { invoice: 0 });
-          }}
-        >
-          <Plus size={28} color="#ffffff" />
-        </Pressable>
-      )}
+      <Pressable
+        className="absolute right-6 w-14 h-14 bg-primary rounded-full items-center justify-center shadow-lg active:scale-95"
+        style={{ elevation: 8, bottom: insets.bottom + 24 }}
+        onPress={() => {
+          navigation.navigate('StockOpnameDetail', { invoice: 0 });
+        }}
+      >
+        <Plus size={28} color="#ffffff" />
+      </Pressable>
     </View>
   );
 }

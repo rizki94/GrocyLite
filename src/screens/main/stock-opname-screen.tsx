@@ -96,7 +96,7 @@ interface InvoiceItem {
 }
 
 export function StockOpnameScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const colors = useThemeColor();
   const route = useRoute<StockOpnameScreenRouteProp>();
   const _invoice = route.params?.invoice || 0;
@@ -110,6 +110,7 @@ export function StockOpnameScreen() {
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState(0); // 0: Open/Draft, 1: Approved
   const [items, setItems] = useState<InvoiceItem[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
 
   // Edit State
   const [isEdit, setIsEdit] = useState(false);
@@ -143,9 +144,36 @@ export function StockOpnameScreen() {
   const [showOptions, setShowOptions] = useState(false);
   const [showDateModal, setShowDateModal] = useState(false);
   const [cachedProducts, setCachedProducts] = useState<Product[]>([]);
+  const [stock, setStock] = useState<any[]>([]);
 
   const qtyInputRef = useRef<TextInput>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Prevent back if unsaved changes
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+      if (!isDirty || status === 1) {
+        return;
+      }
+
+      e.preventDefault();
+
+      Alert.alert(
+        t('alert.unsavedChanges.title'),
+        t('alert.unsavedChanges.content'),
+        [
+          { text: t('alert.unsavedChanges.no'), style: 'cancel', onPress: () => { } },
+          {
+            text: t('alert.unsavedChanges.yes'),
+            style: 'destructive',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ]
+      );
+    });
+
+    return unsubscribe;
+  }, [navigation, isDirty, status, t]);
 
   // Load product cache for offline capability
   const loadCache = async () => {
@@ -167,6 +195,12 @@ export function StockOpnameScreen() {
           stock: p.Stock || p.stock || 0,
         })));
       }
+
+      // Load stock system cache
+      const cachedStock = await AsyncStorage.getItem('stock_system_cache');
+      if (cachedStock) {
+        setStock(JSON.parse(cachedStock));
+      }
     } catch (err) {
       console.error('Failed to load product cache', err);
     }
@@ -178,14 +212,23 @@ export function StockOpnameScreen() {
 
   // Robust Sync Mechanism
   const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const syncAllProducts = async () => {
+  const syncAllProducts = async (force = true) => {
     if (isOffline) {
-      Alert.alert(t('element.error'), t('element.mustConnectInternet'));
+      if (force) Alert.alert(t('element.error'), t('element.mustConnectInternet'));
       return;
     }
 
     try {
       setIsSyncingAll(true);
+
+      // 1. Sync Stock System first as it is fast
+      const stockRes = await apiClient.get('/api/bridge/stock_system');
+      if (stockRes.data) {
+        setStock(stockRes.data);
+        await AsyncStorage.setItem('stock_system_cache', JSON.stringify(stockRes.data));
+      }
+
+      // 2. Sync All Products
       let currentPage = 1;
       let allProducts: any[] = [];
       let hasMoreData = true;
@@ -223,12 +266,12 @@ export function StockOpnameScreen() {
       await AsyncStorage.setItem('products_full_cache', JSON.stringify(allProducts));
       await AsyncStorage.setItem('products_last_sync', new Date().toDateString());
 
-      if (mapped.length > 0) {
-        Alert.alert(t('element.success'), `Saved ${mapped.length} products to cache.`);
+      if (force && mapped.length > 0) {
+        Alert.alert(t('element.success'), t('warehouse.stockOpname.savedToCache', { count: mapped.length }));
       }
     } catch (e) {
       console.error('Sync failed', e);
-      Alert.alert(t('element.error'), 'Failed to sync product database');
+      if (force) Alert.alert(t('element.error'), t('warehouse.stockOpname.syncFailed'));
     } finally {
       setIsSyncingAll(false);
     }
@@ -247,7 +290,7 @@ export function StockOpnameScreen() {
         const today = new Date().toDateString();
 
         if (lastSync !== today) {
-          syncAllProducts();
+          syncAllProducts(false);
         }
       } catch (e) {
         console.error('Failed to check sync status', e);
@@ -317,10 +360,6 @@ export function StockOpnameScreen() {
     refreshWarehouse,
   );
 
-  const { data: stock, isLoading: stockLoading } = useFetch(
-    '/api/bridge/stock_system',
-  );
-
   // Sync products list from cache for a truly instant experience
   const products = useMemo(() => {
     const lowerQuery = productSearch.toLowerCase().trim();
@@ -340,6 +379,7 @@ export function StockOpnameScreen() {
       setNotes(fetchInvoice.invoice.notes || '');
       setStatus(fetchInvoice.invoice.status || 0);
       setItems(fetchInvoice.invoiceItems || []);
+      setIsDirty(false);
     }
   }, [fetchInvoice, _invoice]);
 
@@ -362,10 +402,10 @@ export function StockOpnameScreen() {
           _invoice ? 'PUT' : 'POST',
           payload,
           {},
-          _invoice ? `Update SO #${_invoice}` : 'Create Stock Opname'
+          _invoice ? t('warehouse.stockOpname.updateSo', { invoice: _invoice }) : t('warehouse.stockOpname.createSo')
         );
         ToastAndroid.show(t('element.savedOffline'), ToastAndroid.SHORT);
-        navigation.goBack();
+        setIsDirty(false);
         return;
       }
 
@@ -378,7 +418,10 @@ export function StockOpnameScreen() {
 
       if (response.data.status === 200) {
         ToastAndroid.show(t('warehouse.stockOpname.savedSuccess'), ToastAndroid.SHORT);
-        navigation.goBack();
+        setIsDirty(false);
+        if (!_invoice && response.data.invoice) {
+          navigation.setParams({ invoice: response.data.invoice });
+        }
       } else {
         ToastAndroid.show(response.data.message || t('warehouse.stockOpname.errorSaving'), ToastAndroid.SHORT);
       }
@@ -398,7 +441,7 @@ export function StockOpnameScreen() {
           onPress: async () => {
             try {
               if (isOffline) {
-                await addToQueue('/api/stock_opname/approve', 'POST', { invoice: _invoice }, {}, `Approve SO #${_invoice}`);
+                await addToQueue('/api/stock_opname/approve', 'POST', { invoice: _invoice }, {}, t('warehouse.stockOpname.approveSo', { invoice: _invoice }));
                 ToastAndroid.show(t('element.savedOffline'), ToastAndroid.SHORT);
                 setStatus(1);
                 return;
@@ -430,7 +473,7 @@ export function StockOpnameScreen() {
           onPress: async () => {
             try {
               if (isOffline) {
-                await addToQueue('/api/stock_opname/open', 'POST', { invoice: _invoice }, {}, `Reopen SO #${_invoice}`);
+                await addToQueue('/api/stock_opname/open', 'POST', { invoice: _invoice }, {}, t('warehouse.stockOpname.reopenSo', { invoice: _invoice }));
                 ToastAndroid.show(t('element.savedOffline'), ToastAndroid.SHORT);
                 setStatus(0);
                 return;
@@ -479,6 +522,7 @@ export function StockOpnameScreen() {
     };
 
     setItems([...items, newItem]);
+    setIsDirty(true);
     resetForm();
     Keyboard.dismiss();
   };
@@ -498,6 +542,7 @@ export function StockOpnameScreen() {
         : item,
     ));
 
+    setIsDirty(true);
     resetForm();
     setIsEdit(false);
     setEditingId(null);
@@ -506,6 +551,7 @@ export function StockOpnameScreen() {
 
   const deleteItem = (id: string) => {
     setItems(items.filter(i => i.id !== id));
+    setIsDirty(true);
   };
 
   const startEdit = (item: InvoiceItem) => {
@@ -547,10 +593,10 @@ export function StockOpnameScreen() {
 
   const calculateTotal = (item: InvoiceItem) => {
     return (
-      item.qty1 * (item.ratio1 || 0) +
-      item.qty2 * (item.ratio2 || 0) +
-      item.qty3 * (item.ratio3 || 0) +
-      item.qty4 * (item.ratio4 || 0)
+      (item.qty1 || 0) * (item.ratio1 || 0) +
+      (item.qty2 || 0) * (item.ratio2 || 0) +
+      (item.qty3 || 0) * (item.ratio3 || 0) +
+      (item.qty4 || 0) * (item.ratio4 || 0)
     );
   };
 
@@ -609,7 +655,7 @@ export function StockOpnameScreen() {
               <Filter size={20} color={showOptions ? colors.primary : colors.foreground} />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => syncAllProducts()}
+              onPress={() => syncAllProducts(true)}
               disabled={isSyncingAll}
               className={cn("p-2", isSyncingAll && "opacity-50")}
             >
@@ -686,7 +732,7 @@ export function StockOpnameScreen() {
                 {isSyncingAll && (
                   <View className="animate-pulse">
                     <Text className="text-[10px] text-primary font-bold">
-                      SYNCING DATABASE...
+                      {t('warehouse.stockOpname.syncingDatabase')}
                     </Text>
                   </View>
                 )}
@@ -695,13 +741,13 @@ export function StockOpnameScreen() {
               {products.length === 0 && !isSyncingAll ? (
                 <View className="py-20 items-center justify-center">
                   <Search size={40} color={colors.mutedForeground} className="opacity-20 mb-4" />
-                  <Text className="text-muted-foreground font-bold">No products found</Text>
+                  <Text className="text-muted-foreground font-bold">{t('warehouse.stockOpname.noProductsFound')}</Text>
                   {!isOffline && (
                     <TouchableOpacity
                       onPress={() => syncAllProducts()}
                       className="mt-4 px-4 py-2 bg-primary rounded-xl"
                     >
-                      <Text className="text-white text-xs font-bold">Sync Full Database</Text>
+                      <Text className="text-white text-xs font-bold">{t('warehouse.stockOpname.syncFullDatabase')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -774,7 +820,10 @@ export function StockOpnameScreen() {
                       keyboardType="numeric"
                       selectTextOnFocus
                       value={currentQty[`qty${num}` as keyof typeof currentQty] === 0 ? '' : currentQty[`qty${num}` as keyof typeof currentQty].toString()}
-                      onChangeText={v => setCurrentQty({ ...currentQty, [`qty${num}`]: Number(v) || 0 })}
+                      onChangeText={v => {
+                        setCurrentQty({ ...currentQty, [`qty${num}`]: Number(v) || 0 });
+                        setIsDirty(true);
+                      }}
                       placeholder="0"
                       className="h-16 text-center font-black text-xl rounded-2xl bg-muted/30 border-input"
                     />
@@ -819,7 +868,7 @@ export function StockOpnameScreen() {
                 <RefreshCw size={18} color={colors.primary} className={cn("mr-3", isSyncing && "animate-spin")} />
                 <View>
                   <Text className="text-primary font-bold text-sm">{t('element.pendingActions')} ({queue.length})</Text>
-                  <Text className="text-primary/60 text-[10px] uppercase font-black">{isSyncing ? 'Syncing...' : t('element.syncNow')}</Text>
+                  <Text className="text-primary/60 text-[10px] uppercase font-black">{isSyncing ? t('warehouse.stockOpname.syncingShort') : t('element.syncNow')}</Text>
                 </View>
               </View>
               <ChevronDown size={16} color={colors.primary} className="-rotate-90 opacity-50" />
@@ -957,13 +1006,13 @@ export function StockOpnameScreen() {
             </View>
             <View className="mb-6">
               <Text className="text-[10px] font-black text-muted-foreground uppercase mb-2 ml-1">{t('warehouse.stockOpname.transactionDate')}</Text>
-              <DatePicker value={date} onChange={setDate} />
+              <DatePicker value={date} onChange={(d) => { setDate(d); setIsDirty(true); }} />
             </View>
             <View className="mb-10">
               <Text className="text-[10px] font-black text-muted-foreground uppercase mb-2 ml-1">{t('warehouse.stockOpname.notesRemarks')}</Text>
               <Input
                 value={notes}
-                onChangeText={setNotes}
+                onChangeText={(v) => { setNotes(v); setIsDirty(true); }}
                 placeholder={t('warehouse.stockOpname.addNotesPlaceholder')}
                 multiline
                 className="min-h-[100px] text-base bg-muted/30 border border-input rounded-2xl px-4"
@@ -1019,7 +1068,7 @@ export function StockOpnameScreen() {
         </View>
       </Modal>
 
-      {(invoiceLoading || stockLoading) && <Loading isLoading={true} />}
+      {(invoiceLoading || isSyncingAll) && <Loading isLoading={true} />}
     </View>
   );
 }
