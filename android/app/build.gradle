@@ -99,6 +99,7 @@ android {
             manifestPlaceholders = [usesCleartextTraffic:"true"]
         }
         release {
+            signingConfig signingConfigs.debug
             // F-Droid will sign the APK with their own key
             manifestPlaceholders = [usesCleartextTraffic:"true"]
             minifyEnabled enableProguardInReleaseBuilds
