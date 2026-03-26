@@ -11,7 +11,9 @@ import {
   TouchableOpacity,
   TextInput,
   Keyboard,
+  FlatList,
 } from 'react-native';
+import { memo, useCallback } from 'react';
 import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
@@ -116,7 +118,7 @@ export function StockOpnameScreen() {
   const [isEdit, setIsEdit] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [currentQty, setCurrentQty] = useState({
+  const [initialQty, setInitialQty] = useState({
     qty1: 0,
     qty2: 0,
     qty3: 0,
@@ -127,7 +129,7 @@ export function StockOpnameScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
-  const debouncedProductSearch = useDebounce(productSearch, 800);
+  const debouncedProductSearch = useDebounce(productSearch, 300);
 
   // Stock details modal
   const [showStockDetail, setShowStockDetail] = useState(false);
@@ -147,7 +149,7 @@ export function StockOpnameScreen() {
   const [stock, setStock] = useState<any[]>([]);
 
   const qtyInputRef = useRef<TextInput>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<FlatList>(null);
 
   // Prevent back if unsaved changes
   useEffect(() => {
@@ -301,7 +303,7 @@ export function StockOpnameScreen() {
   }, [isOffline]);
 
   // Helper: Format Split Stock
-  const formatSplitStock = (
+  const formatSplitStock = useCallback((
     total: number,
     p: Product | Partial<Product> | undefined,
   ) => {
@@ -327,7 +329,7 @@ export function StockOpnameScreen() {
     if (p.Unit4 && q4 !== 0) parts.push(`${q4} ${p.Unit4}`);
 
     return parts.length > 0 ? parts.join(' ') : `0 ${p.Unit}`;
-  };
+  }, []);
 
   // Auto-focus quantity input when product is selected
   useEffect(() => {
@@ -362,7 +364,7 @@ export function StockOpnameScreen() {
 
   // Sync products list from cache for a truly instant experience
   const products = useMemo(() => {
-    const lowerQuery = productSearch.toLowerCase().trim();
+    const lowerQuery = debouncedProductSearch.toLowerCase().trim();
     if (!lowerQuery) {
       return cachedProducts.slice(0, 50);
     }
@@ -370,7 +372,7 @@ export function StockOpnameScreen() {
     return cachedProducts.filter(p =>
       p.name.toLowerCase().includes(lowerQuery)
     ).slice(0, 50);
-  }, [productSearch, cachedProducts]);
+  }, [debouncedProductSearch, cachedProducts]);
 
   // Initialize Invoice Data
   useEffect(() => {
@@ -494,7 +496,7 @@ export function StockOpnameScreen() {
     );
   };
 
-  const addItem = () => {
+  const addItem = (qty: typeof initialQty) => {
     if (!selectedProduct) return;
 
     const existingIndex = items.findIndex(i => i.product_id === selectedProduct.id);
@@ -507,10 +509,10 @@ export function StockOpnameScreen() {
       id: uuid.v4().toString(),
       product_id: selectedProduct.id,
       product_name: selectedProduct.name,
-      qty1: currentQty.qty1,
-      qty2: currentQty.qty2,
-      qty3: currentQty.qty3,
-      qty4: currentQty.qty4,
+      qty1: qty.qty1,
+      qty2: qty.qty2,
+      qty3: qty.qty3,
+      qty4: qty.qty4,
       unit1: selectedProduct.Unit,
       unit2: selectedProduct.Unit2,
       unit3: selectedProduct.Unit3,
@@ -527,17 +529,17 @@ export function StockOpnameScreen() {
     Keyboard.dismiss();
   };
 
-  const updateItem = () => {
+  const updateItem = (qty: typeof initialQty) => {
     if (!editingId || !selectedProduct) return;
 
     setItems(items.map(item =>
       item.id === editingId
         ? {
           ...item,
-          qty1: currentQty.qty1,
-          qty2: currentQty.qty2,
-          qty3: currentQty.qty3,
-          qty4: currentQty.qty4,
+          qty1: qty.qty1,
+          qty2: qty.qty2,
+          qty3: qty.qty3,
+          qty4: qty.qty4,
         }
         : item,
     ));
@@ -569,7 +571,7 @@ export function StockOpnameScreen() {
     };
 
     setSelectedProduct(prod as Product);
-    setCurrentQty({
+    setInitialQty({
       qty1: item.qty1,
       qty2: item.qty2,
       qty3: item.qty3,
@@ -577,38 +579,43 @@ export function StockOpnameScreen() {
     });
     setEditingId(item.id);
     setIsEdit(true);
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    scrollViewRef.current?.scrollToOffset({ offset: 0, animated: true });
   };
 
   const resetForm = () => {
     setSelectedProduct(null);
-    setCurrentQty({ qty1: 0, qty2: 0, qty3: 0, qty4: 0 });
+    setInitialQty({ qty1: 0, qty2: 0, qty3: 0, qty4: 0 });
     setProductSearch('');
     setShowSearchResults(false);
   };
 
-  const getSystemStock = (productId: string) => {
+  const getSystemStock = useCallback((productId: string) => {
     return stock?.find((s: any) => s.PKey === productId)?.Stock || 0;
-  };
+  }, [stock]);
 
-  const calculateTotal = (item: InvoiceItem) => {
+  const calculateTotal = useCallback((item: InvoiceItem) => {
     return (
       (item.qty1 || 0) * (item.ratio1 || 0) +
       (item.qty2 || 0) * (item.ratio2 || 0) +
       (item.qty3 || 0) * (item.ratio3 || 0) +
       (item.qty4 || 0) * (item.ratio4 || 0)
     );
-  };
+  }, []);
 
-  const getDifference = (item: InvoiceItem) => {
+  const getDifference = useCallback((item: InvoiceItem) => {
     const total = calculateTotal(item);
     const sysStock = item.sys_stock !== undefined ? Number(item.sys_stock) : getSystemStock(item.product_id);
     return total - sysStock;
-  };
+  }, [calculateTotal, getSystemStock]);
+
+  const handleShowDetail = useCallback((prod: any) => {
+    setStockDetailProduct(prod);
+    setShowStockDetail(true);
+  }, []);
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
-      const prodName = item.product_name || products.find(p => p.id === item.product_id)?.name || '';
+      const prodName = item.product_name || cachedProducts.find(p => p.id === item.product_id)?.name || '';
       const matchesSearch = prodName.toLowerCase().includes(searchQuery.toLowerCase());
       if (hideEmpty) {
         const diff = getDifference(item);
@@ -617,13 +624,13 @@ export function StockOpnameScreen() {
       return matchesSearch;
     }).map(item => ({
       ...item,
-      product_name: item.product_name || products.find(p => p.id === item.product_id)?.name || 'Unknown',
+      product_name: item.product_name || cachedProducts.find(p => p.id === item.product_id)?.name || 'Unknown',
     }));
-  }, [items, searchQuery, hideEmpty, products, stock]);
+  }, [items, searchQuery, hideEmpty, cachedProducts, stock]);
 
-  const getProductSource = (productId: string) => {
+  const getProductSource = useCallback((productId: string) => {
     return stock?.find((s: any) => s.PKey === productId)?.Source || '';
-  };
+  }, [stock]);
 
   const insets = useSafeAreaInsets();
 
@@ -724,255 +731,168 @@ export function StockOpnameScreen() {
         {/* Instant Search Results Overlay */}
         {showSearchResults && status === 0 && (
           <View className="absolute top-0 left-0 right-0 bottom-0 bg-background z-50">
-            <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
-              <View className="px-4 py-2 bg-secondary/5 flex-row items-center justify-between">
-                <Text className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                  {t('warehouse.stockOpname.selectProduct')}
-                </Text>
-                {isSyncingAll && (
-                  <View className="animate-pulse">
-                    <Text className="text-[10px] text-primary font-bold">
-                      {t('warehouse.stockOpname.syncingDatabase')}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {products.length === 0 && !isSyncingAll ? (
-                <View className="py-20 items-center justify-center">
-                  <Search size={40} color={colors.mutedForeground} className="opacity-20 mb-4" />
-                  <Text className="text-muted-foreground font-bold">{t('warehouse.stockOpname.noProductsFound')}</Text>
-                  {!isOffline && (
-                    <TouchableOpacity
-                      onPress={() => syncAllProducts()}
-                      className="mt-4 px-4 py-2 bg-primary rounded-xl"
-                    >
-                      <Text className="text-white text-xs font-bold">{t('warehouse.stockOpname.syncFullDatabase')}</Text>
-                    </TouchableOpacity>
+            <FlatList
+              data={products}
+              keyExtractor={(item) => item.id}
+              className="flex-1"
+              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                <View className="px-4 py-2 bg-secondary/5 flex-row items-center justify-between">
+                  <Text className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                    {t('warehouse.stockOpname.selectProduct')}
+                  </Text>
+                  {isSyncingAll && (
+                    <View className="animate-pulse">
+                      <Text className="text-[10px] text-primary font-bold">
+                        {t('warehouse.stockOpname.syncingDatabase')}
+                      </Text>
+                    </View>
                   )}
                 </View>
-              ) : (
-                products.map(prod => {
-                  const source = getProductSource(prod.id);
-                  return (
-                    <TouchableOpacity
-                      key={prod.id}
-                      onPress={() => {
-                        setSelectedProduct(prod);
-                        setProductSearch(prod.name);
-                        setShowSearchResults(false);
-                        Keyboard.dismiss();
-                      }}
-                      className="px-4 py-3 border-b border-border/50 flex-row items-center justify-between active:bg-primary/5"
-                    >
-                      <View className="flex-1 mr-4">
-                        <View className="flex-row items-center flex-wrap gap-1.5">
-                          <Text className="font-bold text-foreground text-sm flex-1">{prod.name}</Text>
-                          {source && (
-                            <View className={cn("px-1.5 py-0.5 rounded-md", source === 'PKP' ? 'bg-yellow-500/10' : 'bg-blue-500/10')}>
-                              <Text className={cn("text-[8px] font-black uppercase", source === 'PKP' ? 'text-yellow-600' : 'text-blue-600')}>
-                                {source}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
+              }
+              ListEmptyComponent={
+                !isSyncingAll ? (
+                  <View className="py-20 items-center justify-center">
+                    <Search size={40} color={colors.mutedForeground} className="opacity-20 mb-4" />
+                    <Text className="text-muted-foreground font-bold">{t('warehouse.stockOpname.noProductsFound')}</Text>
+                    {!isOffline && (
+                      <TouchableOpacity
+                        onPress={() => syncAllProducts()}
+                        className="mt-4 px-4 py-2 bg-primary rounded-xl"
+                      >
+                        <Text className="text-white text-xs font-bold">{t('warehouse.stockOpname.syncFullDatabase')}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : null
+              }
+              renderItem={({ item: prod }) => {
+                const source = getProductSource(prod.id);
+                return (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedProduct(prod);
+                      setProductSearch(prod.name);
+                      setShowSearchResults(false);
+                      Keyboard.dismiss();
+                    }}
+                    className="px-4 py-3 border-b border-border/50 flex-row items-center justify-between active:bg-primary/5"
+                  >
+                    <View className="flex-1 mr-4">
+                      <View className="flex-row items-center flex-wrap gap-1.5">
+                        <Text className="font-bold text-foreground text-sm flex-1">{prod.name}</Text>
+                        {source && (
+                          <View className={cn("px-1.5 py-0.5 rounded-md", source === 'PKP' ? 'bg-yellow-500/10' : 'bg-blue-500/10')}>
+                            <Text className={cn("text-[8px] font-black uppercase", source === 'PKP' ? 'text-yellow-600' : 'text-blue-600')}>
+                              {source}
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-              <View className="h-40" />
-            </ScrollView>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+              ListFooterComponent={<View className="h-40" />}
+            />
           </View>
         )}
 
         {/* Selected Product Quantity Input Card */}
         {status === 0 && selectedProduct && (
-          <View className="bg-card border-b border-border shadow-2xl p-5 z-40">
-            <View className="flex-row items-center justify-between mb-5">
-              <View className="flex-1 mr-4">
-                <Text className="font-black text-primary text-lg" numberOfLines={2}>{selectedProduct.name}</Text>
-                <View className="flex-row items-center mt-1">
-                  <View className="bg-primary/10 px-2 py-0.5 rounded-md mr-2">
-                    <Text className="text-[9px] font-black text-primary uppercase">
-                      {isEdit ? t('element.editing') : t('element.adding')}
-                    </Text>
-                  </View>
-                  <Text className="text-xs text-muted-foreground">
-                    {t('element.stock')}: {isOffline ? '--' : formatSplitStock(Number(selectedProduct.stock || 0), selectedProduct)}
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity onPress={resetForm} className="p-2 bg-secondary/10 rounded-full">
-                <X size={20} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </View>
-
-            <View className="flex-row flex-wrap gap-3 mb-6">
-              {[1, 2, 3, 4].map(num => {
-                const unit = selectedProduct[`Unit${num === 1 ? '' : num}` as keyof Product];
-                if (!unit && num > 1) return null;
-                return (
-                  <View key={num} className="flex-1 min-w-[75px]">
-                    <Text className="text-[10px] font-black text-muted-foreground uppercase mb-1.5 ml-1 tracking-tighter">{String(unit)}</Text>
-                    <Input
-                      ref={num === 1 ? qtyInputRef : undefined}
-                      keyboardType="numeric"
-                      selectTextOnFocus
-                      value={currentQty[`qty${num}` as keyof typeof currentQty] === 0 ? '' : currentQty[`qty${num}` as keyof typeof currentQty].toString()}
-                      onChangeText={v => {
-                        setCurrentQty({ ...currentQty, [`qty${num}`]: Number(v) || 0 });
-                        setIsDirty(true);
-                      }}
-                      placeholder="0"
-                      className="h-16 text-center font-black text-xl rounded-2xl bg-muted/30 border-input"
-                    />
-                  </View>
-                );
-              })}
-            </View>
-
-            <Button
-              label={isEdit ? t('element.updateItem') : t('element.addItemToList')}
-              onPress={isEdit ? updateItem : addItem}
-              className="w-full h-14 rounded-2xl shadow-lg shadow-primary/30"
-              labelClasses="font-black uppercase tracking-widest"
-            />
-          </View>
+          <ProductQuantityForm
+            selectedProduct={selectedProduct}
+            isEdit={isEdit}
+            initialQty={initialQty}
+            isOffline={isOffline}
+            formatSplitStock={formatSplitStock}
+            resetForm={resetForm}
+            onAdd={addItem}
+            onUpdate={updateItem}
+            setIsDirty={setIsDirty}
+            qtyInputRef={qtyInputRef}
+            colors={colors}
+            t={t}
+          />
         )}
 
         {/* Main List */}
-        <ScrollView
+        <FlatList
           ref={scrollViewRef}
+          data={filteredItems}
+          keyExtractor={(item) => item.id}
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
           keyboardShouldPersistTaps="handled"
-        >
-          {/* Offline & Sync Status Banners */}
-          {isOffline && (
-            <View className="mb-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl flex-row items-center justify-center">
-              <Cloud size={16} color="#f97316" className="mr-2" />
-              <Text className="text-orange-600 font-bold text-sm">
-                {t('element.offline')} • {t('element.showingCachedData')}
-              </Text>
-            </View>
-          )}
-
-          {!isOffline && queue.length > 0 && (
-            <TouchableOpacity
-              onPress={() => processQueue()}
-              disabled={isSyncing}
-              className="mb-4 p-4 bg-primary/10 border border-primary/30 rounded-2xl flex-row items-center justify-between"
-            >
-              <View className="flex-row items-center">
-                <RefreshCw size={18} color={colors.primary} className={cn("mr-3", isSyncing && "animate-spin")} />
-                <View>
-                  <Text className="text-primary font-bold text-sm">{t('element.pendingActions')} ({queue.length})</Text>
-                  <Text className="text-primary/60 text-[10px] uppercase font-black">{isSyncing ? t('warehouse.stockOpname.syncingShort') : t('element.syncNow')}</Text>
+          ListHeaderComponent={
+            <>
+              {/* Offline & Sync Status Banners */}
+              {isOffline && (
+                <View className="mb-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl flex-row items-center justify-center">
+                  <Cloud size={16} color="#f97316" className="mr-2" />
+                  <Text className="text-orange-600 font-bold text-sm">
+                    {t('element.offline')} • {t('element.showingCachedData')}
+                  </Text>
                 </View>
-              </View>
-              <ChevronDown size={16} color={colors.primary} className="-rotate-90 opacity-50" />
-            </TouchableOpacity>
-          )}
+              )}
 
-          {/* List Search Filter */}
-          {showSearch && (
-            <View className="mb-4">
-              <Input
-                placeholder={t('warehouse.stockOpname.filterListedItems')}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                className="h-11 bg-muted/50 border-0 rounded-xl"
-                leftIcon={<Search size={16} color={colors.mutedForeground} />}
-              />
-            </View>
-          )}
+              {!isOffline && queue.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => processQueue()}
+                  disabled={isSyncing}
+                  className="mb-4 p-4 bg-primary/10 border border-primary/30 rounded-2xl flex-row items-center justify-between"
+                >
+                  <View className="flex-row items-center">
+                    <RefreshCw size={18} color={colors.primary} className={cn("mr-3", isSyncing && "animate-spin")} />
+                    <View>
+                      <Text className="text-primary font-bold text-sm">{t('element.pendingActions')} ({queue.length})</Text>
+                      <Text className="text-primary/60 text-[10px] uppercase font-black">{isSyncing ? t('warehouse.stockOpname.syncingShort') : t('element.syncNow')}</Text>
+                    </View>
+                  </View>
+                  <ChevronDown size={16} color={colors.primary} className="-rotate-90 opacity-50" />
+                </TouchableOpacity>
+              )}
 
-          {/* The Actual List of Items */}
-          {filteredItems.length === 0 ? (
+              {/* List Search Filter */}
+              {showSearch && (
+                <View className="mb-4">
+                  <Input
+                    placeholder={t('warehouse.stockOpname.filterListedItems')}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    className="h-11 bg-muted/50 border-0 rounded-xl"
+                    leftIcon={<Search size={16} color={colors.mutedForeground} />}
+                  />
+                </View>
+              )}
+            </>
+          }
+          ListEmptyComponent={
             <View className="py-20 items-center justify-center opacity-30">
               <FileText size={64} color={colors.mutedForeground} />
               <Text className="mt-4 font-bold text-muted-foreground">{t('general.noData')}</Text>
             </View>
-          ) : (
-            filteredItems.map((item, index) => {
-              const source = getProductSource(item.product_id);
-              const diffValue = getDifference(item);
-              const sysValue = item.sys_stock !== undefined ? Number(item.sys_stock) : getSystemStock(item.product_id);
-              const totalPhys = calculateTotal(item);
-
-              const prodInfo = {
-                id: item.product_id,
-                name: item.product_name || 'Unknown',
-                Unit: item.unit1 || '', Unit2: item.unit2, Unit3: item.unit3, Unit4: item.unit4,
-                Rat1: item.ratio1 || 1, Rat2: item.ratio2 || 1, Rat3: item.ratio3 || 1, Rat4: item.ratio4 || 1,
-              };
-
-              return (
-                <View key={item.id} className="mb-2 bg-card rounded-2xl border border-border/60 shadow-sm overflow-hidden">
-                  <View className="flex-row p-3 items-center">
-                    <View className="bg-secondary/40 h-8 w-8 rounded-xl items-center justify-center mr-2.5">
-                      <Text className="font-black text-muted-foreground text-[10px]">{index + 1}</Text>
-                    </View>
-                    <View className="flex-1">
-                      <TouchableOpacity
-                        onPress={() => {
-                          setStockDetailProduct(prodInfo as Product);
-                          setShowStockDetail(true);
-                        }}
-                      >
-                        <View className="flex-row items-center flex-wrap gap-1.5">
-                          <Text className="font-bold text-foreground text-[13px] leading-tight" numberOfLines={2}>
-                            {item.product_name}
-                          </Text>
-                          {source && (
-                            <View className={cn("px-1.5 py-0.5 rounded-md", source === 'PKP' ? 'bg-yellow-500/10' : 'bg-blue-500/10')}>
-                              <Text className={cn("text-[8px] font-black uppercase", source === 'PKP' ? 'text-yellow-600' : 'text-blue-600')}>
-                                {source}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                    {status === 0 && (
-                      <View className="flex-row gap-1.5">
-                        <TouchableOpacity onPress={() => startEdit(item)} className="p-2.5 bg-blue-500/10 rounded-xl">
-                          <Edit2 size={14} color="#3b82f6" />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => deleteItem(item.id)} className="p-2.5 bg-red-500/10 rounded-xl">
-                          <Trash2 size={14} color="#ef4444" />
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-
-                  <View className="flex-row bg-secondary/5 px-2 py-2 border-t border-border/30">
-                    <View className="flex-1 items-center">
-                      <Text className="text-[8px] font-black text-muted-foreground uppercase opacity-60 mb-0.5">{t('warehouse.stockOpname.physical')}</Text>
-                      <Text className="text-[11px] font-black text-foreground">{formatSplitStock(totalPhys, prodInfo)}</Text>
-                    </View>
-                    {showSystemStock && (
-                      <>
-                        <View className="flex-1 px-1 border-l border-border/30 items-center">
-                          <Text className="text-[8px] font-black text-muted-foreground uppercase opacity-60 mb-0.5">{t('warehouse.stockOpname.system')}</Text>
-                          <Text className="text-[11px] font-bold text-muted-foreground/80">{formatSplitStock(sysValue, prodInfo)}</Text>
-                        </View>
-                        <View className="flex-1 pl-1 border-l border-border/30 items-center">
-                          <Text className="text-[8px] font-black text-muted-foreground uppercase opacity-60 mb-0.5">{t('warehouse.stockOpname.difference')}</Text>
-                          <Text className={cn("text-[11px] font-black", diffValue < 0 ? 'text-red-500' : 'text-green-500')}>
-                            {diffValue > 0 ? '+' : ''}{formatSplitStock(diffValue, prodInfo)}
-                          </Text>
-                        </View>
-                      </>
-                    )}
-                  </View>
-                </View>
-              );
-            })
+          }
+          renderItem={({ item, index }) => (
+            <InvoiceItemRow
+              item={item}
+              index={index}
+              status={status}
+              showSystemStock={showSystemStock}
+              onEdit={startEdit}
+              onDelete={deleteItem}
+              onShowDetail={handleShowDetail}
+              getProductSource={getProductSource}
+              getDifference={getDifference}
+              getSystemStock={getSystemStock}
+              calculateTotal={calculateTotal}
+              formatSplitStock={formatSplitStock}
+              colors={colors}
+              t={t}
+            />
           )}
-          <View className="h-40" />
-        </ScrollView>
+          ListFooterComponent={<View className="h-40" />}
+        />
       </View>
 
       {/* Floating Action Buttons */}
@@ -1072,3 +992,168 @@ export function StockOpnameScreen() {
     </View>
   );
 }
+
+const ProductQuantityForm = memo(({
+  selectedProduct,
+  isEdit,
+  initialQty,
+  isOffline,
+  formatSplitStock,
+  resetForm,
+  onAdd,
+  onUpdate,
+  setIsDirty,
+  qtyInputRef,
+  colors,
+  t
+}: any) => {
+  const [currentQty, setCurrentQty] = useState(initialQty);
+
+  // Update local state when initialQty or product changes
+  useEffect(() => {
+    setCurrentQty(initialQty);
+  }, [initialQty, selectedProduct.id]);
+
+  return (
+    <View className="bg-card border-b border-border shadow-2xl p-5 z-40">
+      <View className="flex-row items-center justify-between mb-5">
+        <View className="flex-1 mr-4">
+          <Text className="font-black text-primary text-lg" numberOfLines={2}>{selectedProduct.name}</Text>
+          <View className="flex-row items-center mt-1">
+            <View className="bg-primary/10 px-2 py-0.5 rounded-md mr-2">
+              <Text className="text-[9px] font-black text-primary uppercase">
+                {isEdit ? t('element.editing') : t('element.adding')}
+              </Text>
+            </View>
+            <Text className="text-xs text-muted-foreground">
+              {t('element.stock')}: {isOffline ? '--' : formatSplitStock(Number(selectedProduct.stock || 0), selectedProduct)}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity onPress={resetForm} className="p-2 bg-secondary/10 rounded-full">
+          <X size={20} color={colors.mutedForeground} />
+        </TouchableOpacity>
+      </View>
+
+      <View className="flex-row flex-wrap gap-3 mb-6">
+        {[1, 2, 3, 4].map(num => {
+          const unit = selectedProduct[`Unit${num === 1 ? '' : num}` as keyof Product];
+          if (!unit && num > 1) return null;
+          return (
+            <View key={num} className="flex-1 min-w-[75px]">
+              <Text className="text-[10px] font-black text-muted-foreground uppercase mb-1.5 ml-1 tracking-tighter">{String(unit)}</Text>
+              <Input
+                ref={num === 1 ? qtyInputRef : undefined}
+                keyboardType="numeric"
+                selectTextOnFocus
+                value={currentQty[`qty${num}` as keyof typeof currentQty] === 0 ? '' : currentQty[`qty${num}` as keyof typeof currentQty].toString()}
+                onChangeText={v => {
+                  const cleaned = v.replace(/[^0-9]/g, '');
+                  setCurrentQty({ ...currentQty, [`qty${num}`]: Number(cleaned) || 0 });
+                  setIsDirty(true);
+                }}
+                placeholder="0"
+                className="h-16 text-center font-black text-xl rounded-2xl bg-muted/30 border-input"
+              />
+            </View>
+          );
+        })}
+      </View>
+
+      <Button
+        label={isEdit ? t('element.updateItem') : t('element.addItemToList')}
+        onPress={() => isEdit ? onUpdate(currentQty) : onAdd(currentQty)}
+        className="w-full h-14 rounded-2xl shadow-lg shadow-primary/30"
+        labelClasses="font-black uppercase tracking-widest"
+      />
+    </View>
+  );
+});
+
+const InvoiceItemRow = memo(({
+  item,
+  index,
+  status,
+  showSystemStock,
+  onEdit,
+  onDelete,
+  onShowDetail,
+  getProductSource,
+  getDifference,
+  getSystemStock,
+  calculateTotal,
+  formatSplitStock,
+  colors,
+  t
+}: any) => {
+  const source = getProductSource(item.product_id);
+  const diffValue = getDifference(item);
+  const sysValue = item.sys_stock !== undefined ? Number(item.sys_stock) : getSystemStock(item.product_id);
+  const totalPhys = calculateTotal(item);
+
+  const prodInfo = {
+    id: item.product_id,
+    name: item.product_name || 'Unknown',
+    Unit: item.unit1 || '', Unit2: item.unit2, Unit3: item.unit3, Unit4: item.unit4,
+    Rat1: item.ratio1 || 1, Rat2: item.ratio2 || 1, Rat3: item.ratio3 || 1, Rat4: item.ratio4 || 1,
+  };
+
+  return (
+    <View className="mb-2 bg-card rounded-2xl border border-border/60 shadow-sm overflow-hidden">
+      <View className="flex-row p-3 items-center">
+        <View className="bg-secondary/40 h-8 w-8 rounded-xl items-center justify-center mr-2.5">
+          <Text className="font-black text-muted-foreground text-[10px]">{index + 1}</Text>
+        </View>
+        <View className="flex-1">
+          <TouchableOpacity
+            onPress={() => onShowDetail(prodInfo)}
+          >
+            <View className="flex-row items-center flex-wrap gap-1.5">
+              <Text className="font-bold text-foreground text-[13px] leading-tight" numberOfLines={2}>
+                {item.product_name}
+              </Text>
+              {source && (
+                <View className={cn("px-1.5 py-0.5 rounded-md", source === 'PKP' ? 'bg-yellow-500/10' : 'bg-blue-500/10')}>
+                  <Text className={cn("text-[8px] font-black uppercase", source === 'PKP' ? 'text-yellow-600' : 'text-blue-600')}>
+                    {source}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+        </View>
+        {status === 0 && (
+          <View className="flex-row gap-1.5">
+            <TouchableOpacity onPress={() => onEdit(item)} className="p-2.5 bg-blue-500/10 rounded-xl">
+              <Edit2 size={14} color="#3b82f6" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onDelete(item.id)} className="p-2.5 bg-red-500/10 rounded-xl">
+              <Trash2 size={14} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      <View className="flex-row bg-secondary/5 px-2 py-2 border-t border-border/30">
+        <View className="flex-1 items-center">
+          <Text className="text-[8px] font-black text-muted-foreground uppercase opacity-60 mb-0.5">{t('warehouse.stockOpname.physical')}</Text>
+          <Text className="text-[11px] font-black text-foreground">{formatSplitStock(totalPhys, prodInfo)}</Text>
+        </View>
+        {showSystemStock && (
+          <>
+            <View className="flex-1 px-1 border-l border-border/30 items-center">
+              <Text className="text-[8px] font-black text-muted-foreground uppercase opacity-60 mb-0.5">{t('warehouse.stockOpname.system')}</Text>
+              <Text className="text-[11px] font-bold text-muted-foreground/80">{formatSplitStock(sysValue, prodInfo)}</Text>
+            </View>
+            <View className="flex-1 pl-1 border-l border-border/30 items-center">
+              <Text className="text-[8px] font-black text-muted-foreground uppercase opacity-60 mb-0.5">{t('warehouse.stockOpname.difference')}</Text>
+              <Text className={cn("text-[11px] font-black", diffValue < 0 ? 'text-red-500' : 'text-green-500')}>
+                {diffValue > 0 ? '+' : ''}{formatSplitStock(diffValue, prodInfo)}
+              </Text>
+            </View>
+          </>
+        )}
+      </View>
+    </View>
+  );
+});
