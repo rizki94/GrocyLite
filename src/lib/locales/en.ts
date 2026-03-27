@@ -127,6 +127,7 @@ export default {
     deselectAll: 'Deselect All',
     selected: 'Selected',
     loadingMore: 'Loading More...',
+    process: 'Process'
   },
   login: {
     user: 'User',
@@ -322,6 +323,11 @@ export default {
       noRecordsFound: 'No stock opname records found',
       syncingProductTitle: 'Syncing Products',
       syncingProductSubtitle: 'Please wait while we sync your product database for offline use.',
+      stockRefreshed: 'Stock refreshed',
+      allStockRefreshed: 'All stock refreshed',
+      refreshAllStockTitle: 'Refresh All Stock',
+      refreshAllStockContent: 'Are you sure you want to refresh system stock for all listed items from the server?',
+      selectedProduct: 'Selected Product',
     },
   },
   attendance: {

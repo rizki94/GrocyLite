@@ -127,6 +127,7 @@ export default {
     deselectAll: 'Batalkan Pilihan',
     selected: 'Terpilih',
     loadingMore: 'Memuat lebih banyak...',
+    process: 'Proses',
   },
   login: {
     user: 'User',
@@ -322,6 +323,11 @@ export default {
       noRecordsFound: 'Tidak ada data stok opname',
       syncingProductTitle: 'Sinkronisasi Produk',
       syncingProductSubtitle: 'Harap tunggu sementara kami menyinkronkan database produk Anda untuk penggunaan offline.',
+      stockRefreshed: 'Stok diperbarui',
+      allStockRefreshed: 'Semua stok diperbarui',
+      refreshAllStockTitle: 'Perbarui Semua Stok',
+      refreshAllStockContent: 'Apakah Anda yakin ingin memperbarui stok sistem untuk semua item dalam daftar dari server?',
+      selectedProduct: 'Produk Dipilih',
     },
   },
   attendance: {

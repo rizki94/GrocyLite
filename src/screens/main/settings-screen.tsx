@@ -58,8 +58,8 @@ export function SettingsScreen() {
   ];
 
   const languages = [
-    { label: t('settings.selectLanguange.english'), value: 'en' },
-    { label: t('settings.selectLanguange.bahasa'), value: 'id' },
+    { label: t('settings.selectLanguage.english'), value: 'en' },
+    { label: t('settings.selectLanguage.bahasa'), value: 'id' },
   ];
 
   const roleName = user?.role_name || user?.role;
@@ -154,7 +154,7 @@ export function SettingsScreen() {
                 <Globe size={20} color={colors.indigo} />
               </View>
               <Text className="text-foreground font-bold">
-                {t('settings.languange')}
+                {t('settings.language')}
               </Text>
             </View>
             <View className="flex-row items-center">
@@ -254,7 +254,7 @@ export function SettingsScreen() {
           >
             <View className="p-6 border-b border-border/10">
               <Text className="text-lg font-black text-foreground tracking-tight">
-                {t('settings.selectLanguage')}
+                {t('settings.language')}
               </Text>
             </View>
             {languages.map(lang => (

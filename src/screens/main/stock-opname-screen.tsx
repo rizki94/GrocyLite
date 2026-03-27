@@ -164,6 +164,9 @@ export function StockOpnameScreen() {
 
   const qtyInputRef = useRef<TextInput>(null);
   const scrollViewRef = useRef<FlatList>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [isRefreshingSystem, setIsRefreshingSystem] = useState<string | null>(null);
+  const itemsCountRef = useRef(items.length);
 
   // Prevent back if unsaved changes
   useEffect(() => {
@@ -553,6 +556,7 @@ export function StockOpnameScreen() {
     setItems([...items, newItem]);
     setIsDirty(true);
     resetForm();
+    setTimeout(() => scrollToBottom(), 500);
     Keyboard.dismiss();
   };
 
@@ -620,6 +624,75 @@ export function StockOpnameScreen() {
     setEditingId(item.id);
     setIsEdit(true);
     scrollViewRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setShowScrollToBottom(true);
+  };
+
+  const handleRefreshItem = async (productId: string) => {
+    if (isOffline) {
+      Alert.alert(t('element.error'), t('element.mustConnectInternet'));
+      return;
+    }
+
+    try {
+      setIsRefreshingSystem(productId);
+      const response = await apiClient.get(`api/bridge/product_stock`, {
+        params: { product_id: productId }
+      });
+
+      const detail = response.data[0];
+      if (detail) {
+        setItems(prev => prev.map(item =>
+          item.product_id === productId
+            ? { ...item, sys_stock: Number(detail.Stock) } as InvoiceItem
+            : item
+        ));
+        setIsDirty(true);
+        ToastAndroid.show(t('warehouse.stockOpname.stockRefreshed'), ToastAndroid.SHORT);
+      }
+    } catch (e) {
+      console.error('Failed to refresh item stock', e);
+    } finally {
+      setIsRefreshingSystem(null);
+    }
+  };
+
+  const handleRefreshAllSystemStock = async () => {
+    if (isOffline) {
+      Alert.alert(t('element.error'), t('element.mustConnectInternet'));
+      return;
+    }
+
+    Alert.alert(
+      t('warehouse.stockOpname.refreshAllStockTitle'),
+      t('warehouse.stockOpname.refreshAllStockContent'),
+      [
+        { text: t('element.cancel'), style: 'cancel' },
+        {
+          text: t('general.process'),
+          onPress: async () => {
+            try {
+              setIsSyncingAll(true);
+              const response = await apiClient.get('/api/bridge/stock_system');
+              if (response.data) {
+                const stockMap = new Map<string, number>(response.data.map((s: any) => [s.PKey, Number(s.Stock)]));
+                setItems(prev => prev.map(item => ({
+                  ...item,
+                  sys_stock: stockMap.get(item.product_id) ?? item.sys_stock
+                })));
+                setStock(response.data);
+                await AsyncStorage.setItem('stock_system_cache', JSON.stringify(response.data));
+                setIsDirty(true);
+                ToastAndroid.show(t('warehouse.stockOpname.allStockRefreshed'), ToastAndroid.SHORT);
+              }
+            } catch (e) {
+              console.error('Failed to refresh all stock', e);
+            } finally {
+              setIsSyncingAll(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const resetForm = () => {
@@ -629,6 +702,31 @@ export function StockOpnameScreen() {
     setShowSearchResults(false);
     setIsEdit(false);
     setEditingId(null);
+  };
+
+  const handleScroll = (event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+
+    // Safety check for valid dimensions
+    if (!layoutMeasurement || !contentSize) return;
+
+    // Show button if we are not at the bottom (with 100px buffer)
+    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
+    const isUserScrolled = contentOffset.y > 300;
+
+    if (isCloseToBottom) {
+      if (showScrollToBottom) setShowScrollToBottom(false);
+    } else if (isUserScrolled && !showScrollToBottom && filteredItems.length > 5) {
+      setShowScrollToBottom(true);
+    } else if (!isUserScrolled && showScrollToBottom) {
+      setShowScrollToBottom(false);
+    }
+  };
+
+  const scrollToBottom = () => {
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollToOffset({ offset: 999999, animated: true });
+    }
   };
 
   const getSystemStock = useCallback((productId: string) => {
@@ -708,8 +806,17 @@ export function StockOpnameScreen() {
               disabled={isSyncingAll}
               className={cn("p-2", isSyncingAll && "opacity-50")}
             >
-              <RotateCcw size={20} color={colors.foreground} className={cn(isSyncingAll && "animate-spin")} />
+              <RotateCcw size={20} color={colors.primary} className={cn(isSyncingAll && "animate-spin")} />
             </TouchableOpacity>
+            {status === 0 && (
+              <TouchableOpacity
+                onPress={handleRefreshAllSystemStock}
+                disabled={isSyncingAll}
+                className={cn("p-2", isSyncingAll && "opacity-50")}
+              >
+                <RefreshCw size={20} color={colors.primary} className={cn(isSyncingAll && "animate-spin")} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -746,126 +853,160 @@ export function StockOpnameScreen() {
             />
           </View>
         )}
+      </View>
 
-        {/* Unified Quick Search Bar - The Primary Interaction Point */}
+      {/* Main Content Area */}
+      <View className="flex-1">
+
+        {/* Add Product Zone - unified card */}
         {status === 0 && !isEdit && (
-          <View className="px-4 pb-4">
-            <View className="relative">
+          <View className="bg-card border-b-2 border-primary/10 shadow-lg">
+            {/* Section label + Search Input */}
+            <View className="px-4 pt-4 pb-3">
+              <Text className="text-[9px] font-black text-primary/70 uppercase tracking-[2px] mb-2">
+                {selectedProduct ? t('warehouse.stockOpname.selectedProduct') : t('warehouse.stockOpname.selectProduct')}
+              </Text>
               <Input
                 placeholder={t('warehouse.stockOpname.searchProductPlaceholder')}
                 value={productSearch}
                 onChangeText={(v) => {
                   setProductSearch(v);
                   setShowSearchResults(v.length > 0);
+                  if (v.length === 0) setSelectedProduct(null);
                 }}
                 onFocus={() => productSearch.length > 0 && setShowSearchResults(true)}
-                className="h-14 rounded-2xl bg-secondary border-input"
-                leftIcon={<Search size={20} color={colors.primary} className="opacity-60" />}
+                className="h-13 rounded-2xl bg-secondary/60 border-border/50"
+                leftIcon={<Search size={18} color={selectedProduct ? colors.primary : colors.mutedForeground} />}
                 rightIcon={productSearch ? (
-                  <TouchableOpacity onPress={() => resetForm()}>
-                    <X size={18} color={colors.mutedForeground} />
+                  <TouchableOpacity onPress={() => resetForm()} className="p-1">
+                    <X size={16} color={colors.mutedForeground} />
                   </TouchableOpacity>
                 ) : null}
               />
             </View>
-          </View>
-        )}
-      </View>
 
-      {/* Main Content Area */}
-      <View className="flex-1">
-        {/* Instant Search Results Overlay */}
-        {showSearchResults && status === 0 && (
-          <View className="absolute top-0 left-0 right-0 bottom-0 bg-background z-50">
-            <FlatList
-              data={products}
-              keyExtractor={(item) => item.id}
-              className="flex-1"
-              keyboardShouldPersistTaps="handled"
-              ListHeaderComponent={
-                <View className="px-4 py-2 bg-secondary/5 flex-row items-center justify-between">
-                  <Text className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                    {t('warehouse.stockOpname.selectProduct')}
-                  </Text>
-                  {isSyncingAll && (
-                    <View className="animate-pulse">
-                      <Text className="text-[10px] text-primary font-bold">
-                        {t('warehouse.stockOpname.syncingDatabase')}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              }
-              ListEmptyComponent={
-                !isSyncingAll ? (
-                  <View className="py-20 items-center justify-center">
-                    <Search size={40} color={colors.mutedForeground} className="opacity-20 mb-4" />
-                    <Text className="text-muted-foreground font-bold">{t('warehouse.stockOpname.noProductsFound')}</Text>
-                    {!isOffline && (
-                      <TouchableOpacity
-                        onPress={() => syncAllProducts()}
-                        className="mt-4 px-4 py-2 bg-primary rounded-xl"
-                      >
-                        <Text className="text-white text-xs font-bold">{t('warehouse.stockOpname.syncFullDatabase')}</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ) : null
-              }
-              renderItem={({ item: prod }) => {
-                const source = getProductSource(prod.id);
-                return (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setSelectedProduct(prod);
-                      setProductSearch(prod.name);
-                      setShowSearchResults(false);
-                      Keyboard.dismiss();
-                    }}
-                    className="px-4 py-3 border-b border-border/50 flex-row items-center justify-between active:bg-primary/5"
-                  >
-                    <View className="flex-1 mr-4">
-                      <View className="flex-row items-center flex-wrap gap-1.5">
-                        <Text className="font-bold text-foreground text-sm flex-1">{prod.name}</Text>
-                        {source && (
-                          <View className={cn("px-1.5 py-0.5 rounded-md", source === 'PKP' ? 'bg-yellow-500/10' : 'bg-blue-500/10')}>
-                            <Text className={cn("text-[8px] font-black uppercase", source === 'PKP' ? 'text-yellow-600' : 'text-blue-600')}>
-                              {source}
-                            </Text>
-                          </View>
+            {/* Inline Search Results Dropdown */}
+            {showSearchResults && (
+              <View className="mx-4 mb-3 rounded-2xl overflow-hidden border border-border/60 bg-background shadow-md" style={{ maxHeight: 220 }}>
+                <FlatList
+                  data={products}
+                  keyExtractor={(item) => item.id}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  ListHeaderComponent={
+                    isSyncingAll ? (
+                      <View className="px-3 py-1.5 bg-primary/5 flex-row items-center gap-2">
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text className="text-[10px] text-primary font-bold">{t('warehouse.stockOpname.syncingDatabase')}</Text>
+                      </View>
+                    ) : null
+                  }
+                  ListEmptyComponent={
+                    !isSyncingAll ? (
+                      <View className="py-8 items-center justify-center gap-2">
+                        <Search size={28} color={colors.mutedForeground} />
+                        <Text className="text-muted-foreground text-xs font-bold">{t('warehouse.stockOpname.noProductsFound')}</Text>
+                        {!isOffline && (
+                          <TouchableOpacity onPress={() => syncAllProducts()} className="mt-1 px-3 py-1.5 bg-primary/10 rounded-xl">
+                            <Text className="text-primary text-xs font-bold">{t('warehouse.stockOpname.syncFullDatabase')}</Text>
+                          </TouchableOpacity>
                         )}
                       </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              }}
-              ListFooterComponent={<View className="h-40" />}
+                    ) : null
+                  }
+                  renderItem={({ item: prod, index }) => {
+                    const source = getProductSource(prod.id);
+                    const isFirst = index === 0;
+                    return (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedProduct(prod);
+                          setProductSearch(prod.name);
+                          setShowSearchResults(false);
+                          Keyboard.dismiss();
+                        }}
+                        className={cn(
+                          "px-4 py-3 flex-row items-center gap-3 active:bg-primary/5",
+                          !isFirst && "border-t border-border/30"
+                        )}
+                        activeOpacity={0.6}
+                      >
+                        {/* Number bubble */}
+                        <View className="w-7 h-7 rounded-full bg-secondary items-center justify-center shrink-0">
+                          <Text className="text-[10px] font-black text-muted-foreground">{index + 1}</Text>
+                        </View>
+                        <View className="flex-1">
+                          <Text className="font-bold text-foreground text-sm" numberOfLines={1}>{prod.name}</Text>
+                          <View className="flex-row items-center gap-1.5 mt-0.5">
+                            {canViewSystemStock && (
+                              <View className="bg-primary/8 px-1.5 py-0.5 rounded-md">
+                                <Text className="text-[9px] font-black text-primary">
+                                  {formatSplitStock(Number(prod.stock || 0), prod)}
+                                </Text>
+                              </View>
+                            )}
+                            {source && (
+                              <View className={cn("px-1.5 py-0.5 rounded-md", source === 'PKP' ? 'bg-yellow-500/10' : 'bg-blue-500/10')}>
+                                <Text className={cn("text-[8px] font-black uppercase", source === 'PKP' ? 'text-yellow-600' : 'text-blue-600')}>
+                                  {source}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <ChevronDown size={14} color={colors.mutedForeground} className="-rotate-90 opacity-40" />
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </View>
+            )}
+
+            {/* Quantity Form - shown when product is selected */}
+            {selectedProduct && (
+              <ProductQuantityForm
+                selectedProduct={selectedProduct}
+                isEdit={isEdit}
+                initialQty={initialQty}
+                isOffline={isOffline}
+                formatSplitStock={formatSplitStock}
+                resetForm={resetForm}
+                onAdd={addItem}
+                onUpdate={updateItem}
+                setIsDirty={setIsDirty}
+                qtyInputRef={qtyInputRef}
+                colors={colors}
+                t={t}
+                canViewSystemStock={canViewSystemStock}
+              />
+            )}
+          </View>
+        )}
+
+        {/* Edit mode form (separate since isEdit hides the search zone above) */}
+        {status === 0 && isEdit && selectedProduct && (
+          <View className="bg-card border-b-2 border-blue-500/20 shadow-lg">
+            <ProductQuantityForm
+              selectedProduct={selectedProduct}
+              isEdit={isEdit}
+              initialQty={initialQty}
+              isOffline={isOffline}
+              formatSplitStock={formatSplitStock}
+              resetForm={resetForm}
+              onAdd={addItem}
+              onUpdate={updateItem}
+              setIsDirty={setIsDirty}
+              qtyInputRef={qtyInputRef}
+              colors={colors}
+              t={t}
+              canViewSystemStock={canViewSystemStock}
             />
           </View>
         )}
 
-        {/* Selected Product Quantity Input Card */}
-        {status === 0 && selectedProduct && (
-          <ProductQuantityForm
-            selectedProduct={selectedProduct}
-            isEdit={isEdit}
-            initialQty={initialQty}
-            isOffline={isOffline}
-            formatSplitStock={formatSplitStock}
-            resetForm={resetForm}
-            onAdd={addItem}
-            onUpdate={updateItem}
-            setIsDirty={setIsDirty}
-            qtyInputRef={qtyInputRef}
-            colors={colors}
-            t={t}
-            canViewSystemStock={canViewSystemStock}
-          />
-        )}
-
         {/* List Search Filter - Sticky Top */}
         {showSearch && (
-          <View className="px-4 pb-2 z-10 bg-background">
+          <View className="px-4 pt-2 z-10 bg-background">
             <Input
               placeholder={t('warehouse.stockOpname.filterListedItems')}
               value={searchQuery}
@@ -888,7 +1029,16 @@ export function StockOpnameScreen() {
           keyExtractor={(item) => item.id}
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() => {
+            // Auto-scroll only if we added an item
+            if (items.length > itemsCountRef.current) {
+              scrollToBottom();
+            }
+            itemsCountRef.current = items.length;
+          }}
           ListHeaderComponent={
             <>
               {/* Offline & Sync Status Banners */}
@@ -934,6 +1084,8 @@ export function StockOpnameScreen() {
               onEdit={startEdit}
               onDelete={deleteItem}
               onShowDetail={handleShowDetail}
+              onRefreshItem={handleRefreshItem}
+              isRefreshing={isRefreshingSystem === item.product_id}
               getProductSource={getProductSource}
               getDifference={getDifference}
               getSystemStock={getSystemStock}
@@ -946,6 +1098,24 @@ export function StockOpnameScreen() {
           ListFooterComponent={<View className="h-40" />}
         />
       </View>
+
+      {/* Scroll to Bottom Button - Modern Centered Style */}
+      {showScrollToBottom && (
+        <View
+          className="absolute left-0 right-0 items-center z-50"
+          style={{ bottom: insets.bottom + 90 }}
+          pointerEvents="box-none"
+        >
+          <TouchableOpacity
+            onPress={scrollToBottom}
+            className="bg-primary/90 w-12 h-12 rounded-full shadow-2xl items-center justify-center border-2 border-white/20"
+            activeOpacity={0.7}
+            style={{ elevation: 8 }}
+          >
+            <ChevronDown size={28} color="#fff" strokeWidth={3} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Floating Action Buttons */}
       <View className="absolute right-6 flex-row gap-3" style={{ bottom: insets.bottom + 24 }}>
@@ -962,14 +1132,6 @@ export function StockOpnameScreen() {
         {status === 0 && (
           <TouchableOpacity onPress={handleSave} className="bg-primary p-5 rounded-full shadow-2xl items-center justify-center">
             <Save size={28} color="#fff" />
-          </TouchableOpacity>
-        )}
-        {items.length > 3 && (
-          <TouchableOpacity
-            onPress={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-            className="bg-card border border-border p-5 rounded-full shadow-2xl items-center justify-center"
-          >
-            <ArrowDown size={28} color={colors.foreground} />
           </TouchableOpacity>
         )}
       </View>
@@ -1100,9 +1262,10 @@ const ProductQuantityForm = memo(({
   const [currentQty, setCurrentQty] = useState(initialQty);
 
   // Update local state when initialQty or product changes
+  // Only update local state when a DIFFERENT product is selected or edit mode is toggled
   useEffect(() => {
     setCurrentQty(initialQty);
-  }, [initialQty, selectedProduct.id]);
+  }, [initialQty, selectedProduct.id, isEdit]);
 
   return (
     <View className="bg-card border-b border-border shadow-2xl p-5 z-40">
@@ -1170,6 +1333,8 @@ const InvoiceItemRow = memo(({
   onEdit,
   onDelete,
   onShowDetail,
+  onRefreshItem,
+  isRefreshing,
   getProductSource,
   getDifference,
   getSystemStock,
@@ -1188,6 +1353,10 @@ const InvoiceItemRow = memo(({
     name: item.product_name || 'Unknown',
     Unit: item.unit1 || '', Unit2: item.unit2, Unit3: item.unit3, Unit4: item.unit4,
     Rat1: item.ratio1 || 1, Rat2: item.ratio2 || 1, Rat3: item.ratio3 || 1, Rat4: item.ratio4 || 1,
+  };
+
+  const handleRefresh = () => {
+    if (onRefreshItem) onRefreshItem(item.product_id);
   };
 
   return (
@@ -1216,6 +1385,13 @@ const InvoiceItemRow = memo(({
         </View>
         {status === 0 && (
           <View className="flex-row gap-1.5">
+            <TouchableOpacity
+              onPress={handleRefresh}
+              disabled={isRefreshing}
+              className={cn("p-2.5 bg-green-500/10 rounded-xl", isRefreshing && "opacity-50")}
+            >
+              <RotateCcw size={14} color="#10b981" className={cn(isRefreshing && "animate-spin")} />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => onEdit(item)} className="p-2.5 bg-blue-500/10 rounded-xl">
               <Edit2 size={14} color="#3b82f6" />
             </TouchableOpacity>
