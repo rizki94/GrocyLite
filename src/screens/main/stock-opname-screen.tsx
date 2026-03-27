@@ -926,17 +926,13 @@ export function StockOpnameScreen() {
                           Keyboard.dismiss();
                         }}
                         className={cn(
-                          "px-4 py-3 flex-row items-center gap-3 active:bg-primary/5",
+                          "px-4 py-2.5 flex-row items-center gap-2 active:bg-primary/5",
                           !isFirst && "border-t border-border/30"
                         )}
                         activeOpacity={0.6}
                       >
-                        {/* Number bubble */}
-                        <View className="w-7 h-7 rounded-full bg-secondary items-center justify-center shrink-0">
-                          <Text className="text-[10px] font-black text-muted-foreground">{index + 1}</Text>
-                        </View>
                         <View className="flex-1">
-                          <Text className="font-bold text-foreground text-sm" numberOfLines={1}>{prod.name}</Text>
+                          <Text className="font-bold text-foreground text-sm">{prod.name}</Text>
                           <View className="flex-row items-center gap-1.5 mt-0.5">
                             {canViewSystemStock && (
                               <View className="bg-primary/8 px-1.5 py-0.5 rounded-md">
