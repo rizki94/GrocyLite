@@ -254,7 +254,7 @@ export function SettingsScreen() {
           >
             <View className="p-6 border-b border-border/10">
               <Text className="text-lg font-black text-foreground tracking-tight">
-                {t('settings.selectLanguageTitle')}
+                {t('settings.selectLanguage')}
               </Text>
             </View>
             {languages.map(lang => (

@@ -12,6 +12,7 @@ import {
   TextInput,
   Keyboard,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { memo, useCallback } from 'react';
 import {
@@ -37,6 +38,7 @@ import {
   FileText,
   Cloud,
   RefreshCw,
+  ArrowDown,
 } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Input } from '../../components/ui/input';
@@ -51,6 +53,7 @@ import { useThemeColor } from '../../lib/colors';
 import { useAuth } from '../../hooks/use-auth';
 import { useDebounce } from '../../hooks/use-debounce';
 import { useOffline } from '../../hooks/use-offline';
+import { usePermissions } from '../../hooks/use-permissions';
 
 // Types
 type RootStackParamList = {
@@ -147,6 +150,17 @@ export function StockOpnameScreen() {
   const [showDateModal, setShowDateModal] = useState(false);
   const [cachedProducts, setCachedProducts] = useState<Product[]>([]);
   const [stock, setStock] = useState<any[]>([]);
+  const [syncProgress, setSyncProgress] = useState(0);
+
+  const { hasPermission } = usePermissions();
+  const canViewSystemStock = hasPermission('STOCK_OPNAME_VIEW_SYSTEM_STOCK');
+
+  useEffect(() => {
+    if (!canViewSystemStock) {
+      setShowSystemStock(false);
+      setHideEmpty(false);
+    }
+  }, [canViewSystemStock]);
 
   const qtyInputRef = useRef<TextInput>(null);
   const scrollViewRef = useRef<FlatList>(null);
@@ -222,12 +236,14 @@ export function StockOpnameScreen() {
 
     try {
       setIsSyncingAll(true);
+      setSyncProgress(0.05);
 
       // 1. Sync Stock System first as it is fast
       const stockRes = await apiClient.get('/api/bridge/stock_system');
       if (stockRes.data) {
         setStock(stockRes.data);
         await AsyncStorage.setItem('stock_system_cache', JSON.stringify(stockRes.data));
+        setSyncProgress(0.1);
       }
 
       // 2. Sync All Products
@@ -239,12 +255,19 @@ export function StockOpnameScreen() {
         const response = await apiClient.get('/api/bridge/product_stock_list', {
           params: { search: '', page: currentPage, limit: 100 },
         });
-        const pageData = Array.isArray(response.data) ? response.data : response.data?.data;
+
+        const data = response.data;
+        const pageData = Array.isArray(data) ? data : data?.data;
+        const totalPages = data?.last_page || Math.ceil((data?.total || 1000) / 100);
 
         if (Array.isArray(pageData) && pageData.length > 0) {
           allProducts = [...allProducts, ...pageData];
           currentPage++;
           hasMoreData = pageData.length === 100;
+
+          // Update progress (from 0.1 to 0.9)
+          const progress = 0.1 + (Math.min(currentPage / totalPages, 1) * 0.8);
+          setSyncProgress(progress);
         } else {
           hasMoreData = false;
         }
@@ -267,6 +290,7 @@ export function StockOpnameScreen() {
       setCachedProducts(mapped);
       await AsyncStorage.setItem('products_full_cache', JSON.stringify(allProducts));
       await AsyncStorage.setItem('products_last_sync', new Date().toDateString());
+      setSyncProgress(1);
 
       if (force && mapped.length > 0) {
         Alert.alert(t('element.success'), t('warehouse.stockOpname.savedToCache', { count: mapped.length }));
@@ -275,7 +299,10 @@ export function StockOpnameScreen() {
       console.error('Sync failed', e);
       if (force) Alert.alert(t('element.error'), t('warehouse.stockOpname.syncFailed'));
     } finally {
-      setIsSyncingAll(false);
+      setTimeout(() => {
+        setIsSyncingAll(false);
+        setSyncProgress(0);
+      }, 500);
     }
   };
 
@@ -552,8 +579,21 @@ export function StockOpnameScreen() {
   };
 
   const deleteItem = (id: string) => {
-    setItems(items.filter(i => i.id !== id));
-    setIsDirty(true);
+    Alert.alert(
+      t('alert.deleteItem.title'),
+      t('alert.deleteItem.content'),
+      [
+        { text: t('alert.deleteItem.no'), style: 'cancel' },
+        {
+          text: t('alert.deleteItem.yes'),
+          style: 'destructive',
+          onPress: () => {
+            setItems(items.filter(i => i.id !== id));
+            setIsDirty(true);
+          },
+        },
+      ],
+    );
   };
 
   const startEdit = (item: InvoiceItem) => {
@@ -587,6 +627,8 @@ export function StockOpnameScreen() {
     setInitialQty({ qty1: 0, qty2: 0, qty3: 0, qty4: 0 });
     setProductSearch('');
     setShowSearchResults(false);
+    setIsEdit(false);
+    setEditingId(null);
   };
 
   const getSystemStock = useCallback((productId: string) => {
@@ -674,22 +716,26 @@ export function StockOpnameScreen() {
         {/* Filter Options Menu */}
         {showOptions && (
           <View className="px-4 pb-4 flex-row gap-2">
-            <Button
-              variant={showSystemStock ? 'default' : 'outline'}
-              size="sm"
-              className="flex-1 h-10 rounded-xl"
-              onPress={() => setShowSystemStock(!showSystemStock)}
-              label={t('warehouse.stockOpname.system')}
-              leftIcon={<Eye size={12} color={showSystemStock ? "#fff" : colors.primary} />}
-            />
-            <Button
-              variant={hideEmpty ? 'default' : 'outline'}
-              size="sm"
-              className="flex-1 h-10 rounded-xl"
-              onPress={() => setHideEmpty(!hideEmpty)}
-              label={t('warehouse.stockOpname.difference')}
-              leftIcon={<Filter size={12} color={hideEmpty ? "#fff" : colors.primary} />}
-            />
+            {canViewSystemStock && (
+              <>
+                <Button
+                  variant={showSystemStock ? 'default' : 'outline'}
+                  size="sm"
+                  className="flex-1 h-10 rounded-xl"
+                  onPress={() => setShowSystemStock(!showSystemStock)}
+                  label={t('warehouse.stockOpname.system')}
+                  leftIcon={<Eye size={12} color={showSystemStock ? "#fff" : colors.primary} />}
+                />
+                <Button
+                  variant={hideEmpty ? 'default' : 'outline'}
+                  size="sm"
+                  className="flex-1 h-10 rounded-xl"
+                  onPress={() => setHideEmpty(!hideEmpty)}
+                  label={t('warehouse.stockOpname.difference')}
+                  leftIcon={<Filter size={12} color={hideEmpty ? "#fff" : colors.primary} />}
+                />
+              </>
+            )}
             <Button
               variant={showSearch ? 'default' : 'outline'}
               size="sm"
@@ -813,7 +859,26 @@ export function StockOpnameScreen() {
             qtyInputRef={qtyInputRef}
             colors={colors}
             t={t}
+            canViewSystemStock={canViewSystemStock}
           />
+        )}
+
+        {/* List Search Filter - Sticky Top */}
+        {showSearch && (
+          <View className="px-4 pb-2 z-10 bg-background">
+            <Input
+              placeholder={t('warehouse.stockOpname.filterListedItems')}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              className="h-11 bg-muted/30 border-input rounded-xl"
+              leftIcon={<Search size={16} color={colors.mutedForeground} />}
+              rightIcon={searchQuery ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <X size={14} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              ) : null}
+            />
+          </View>
         )}
 
         {/* Main List */}
@@ -851,19 +916,6 @@ export function StockOpnameScreen() {
                   </View>
                   <ChevronDown size={16} color={colors.primary} className="-rotate-90 opacity-50" />
                 </TouchableOpacity>
-              )}
-
-              {/* List Search Filter */}
-              {showSearch && (
-                <View className="mb-4">
-                  <Input
-                    placeholder={t('warehouse.stockOpname.filterListedItems')}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    className="h-11 bg-muted/50 border-0 rounded-xl"
-                    leftIcon={<Search size={16} color={colors.mutedForeground} />}
-                  />
-                </View>
               )}
             </>
           }
@@ -912,6 +964,14 @@ export function StockOpnameScreen() {
             <Save size={28} color="#fff" />
           </TouchableOpacity>
         )}
+        {items.length > 3 && (
+          <TouchableOpacity
+            onPress={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+            className="bg-card border border-border p-5 rounded-full shadow-2xl items-center justify-center"
+          >
+            <ArrowDown size={28} color={colors.foreground} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Modals */}
@@ -957,12 +1017,13 @@ export function StockOpnameScreen() {
                 <Text className="text-xl font-black text-foreground">{t('warehouse.stockOpname.stockDetails')}</Text>
                 <Text className="text-primary font-bold text-sm mt-0.5">{stockDetailProduct?.name}</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowStockDetail(false)} className="p-2 bg-secondary/10 rounded-full">
-                <X size={24} color={colors.foreground} />
-              </TouchableOpacity>
             </View>
             <ScrollView className="p-4 max-h-[500px]">
-              {warehouseLoading ? <Loading isLoading={true} /> : !stockByWarehouse || stockByWarehouse.length === 0 ? (
+              {warehouseLoading ? (
+                <View className="py-20 items-center justify-center">
+                  <ActivityIndicator size="large" color={colors.primary} />
+                </View>
+              ) : !stockByWarehouse || stockByWarehouse.length === 0 ? (
                 <View className="py-20 items-center">
                   <Text className="text-muted-foreground mb-6 font-bold">{t('warehouse.stockOpname.noStockInfo')}</Text>
                   <Button label={t('warehouse.stockOpname.retry')} onPress={() => refetchWarehouseData()} variant="outline" />
@@ -988,7 +1049,35 @@ export function StockOpnameScreen() {
         </View>
       </Modal>
 
-      {(invoiceLoading || isSyncingAll) && <Loading isLoading={true} />}
+      {invoiceLoading && <Loading isLoading={true} />}
+      {isSyncingAll && (
+        <Modal transparent visible={isSyncingAll}>
+          <View className="flex-1 bg-black/60 items-center justify-center px-10">
+            <View className="bg-card w-full p-8 rounded-[40px] shadow-2xl items-center">
+              <View className="w-20 h-20 bg-primary/10 rounded-full items-center justify-center mb-6">
+                <RefreshCw size={40} color={colors.primary} className="animate-spin" />
+              </View>
+              <Text className="text-xl font-black text-foreground mb-2 text-center">
+                {t('warehouse.stockOpname.syncingProductTitle')}
+              </Text>
+              <Text className="text-muted-foreground text-center mb-10 font-medium">
+                {t('warehouse.stockOpname.syncingProductSubtitle')}
+              </Text>
+
+              {/* Progress Bar */}
+              <View className="w-full h-3 bg-secondary rounded-full overflow-hidden mb-4">
+                <View
+                  className="h-full bg-primary"
+                  style={{ width: `${syncProgress * 100}%` }}
+                />
+              </View>
+              <Text className="font-black text-primary text-xs uppercase tracking-widest">
+                {Math.round(syncProgress * 100)}% {t('general.loading')}
+              </Text>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -1005,7 +1094,8 @@ const ProductQuantityForm = memo(({
   setIsDirty,
   qtyInputRef,
   colors,
-  t
+  t,
+  canViewSystemStock
 }: any) => {
   const [currentQty, setCurrentQty] = useState(initialQty);
 
@@ -1025,9 +1115,11 @@ const ProductQuantityForm = memo(({
                 {isEdit ? t('element.editing') : t('element.adding')}
               </Text>
             </View>
-            <Text className="text-xs text-muted-foreground">
-              {t('element.stock')}: {isOffline ? '--' : formatSplitStock(Number(selectedProduct.stock || 0), selectedProduct)}
-            </Text>
+            {canViewSystemStock && (
+              <Text className="text-xs text-muted-foreground">
+                {t('element.stock')}: {isOffline ? '--' : formatSplitStock(Number(selectedProduct.stock || 0), selectedProduct)}
+              </Text>
+            )}
           </View>
         </View>
         <TouchableOpacity onPress={resetForm} className="p-2 bg-secondary/10 rounded-full">

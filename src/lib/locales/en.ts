@@ -320,6 +320,8 @@ export default {
       errorSaving: 'Error saving',
       noNotes: 'No notes',
       noRecordsFound: 'No stock opname records found',
+      syncingProductTitle: 'Syncing Products',
+      syncingProductSubtitle: 'Please wait while we sync your product database for offline use.',
     },
   },
   attendance: {

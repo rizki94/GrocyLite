@@ -320,6 +320,8 @@ export default {
       errorSaving: 'Gagal menyimpan',
       noNotes: 'Tidak ada catatan',
       noRecordsFound: 'Tidak ada data stok opname',
+      syncingProductTitle: 'Sinkronisasi Produk',
+      syncingProductSubtitle: 'Harap tunggu sementara kami menyinkronkan database produk Anda untuk penggunaan offline.',
     },
   },
   attendance: {
