@@ -23,7 +23,7 @@ import {
   TrendingDown,
 } from 'lucide-react-native';
 import { Card } from '../../components/ui/card';
-import { DatePicker } from '../../components/ui/date-picker';
+import { DateRangePicker } from '../../components/ui/date-range-picker';
 import { Input } from '../../components/ui/input';
 import { Loading } from '../../components/ui/loading';
 import { ConnectionError } from '../../components/connection-error';
@@ -38,7 +38,8 @@ interface SalesApproveItem {
 export function SalesApproveScreen({ navigation }: any) {
   const { t } = useTranslation();
   const colors = useThemeColor();
-  const [date, setDate] = useState(new Date());
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
   const [status, setStatus] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -51,11 +52,12 @@ export function SalesApproveScreen({ navigation }: any) {
     'api/bridge/approve_list',
     {
       params: {
-        date: dateFormatted(date),
+        startDate: dateFormatted(startDate),
+        endDate: dateFormatted(endDate),
         status: status ? 'true' : 'false',
       },
     },
-    { date, status },
+    { startDate, endDate, status },
     refreshing,
   );
 
@@ -118,7 +120,8 @@ export function SalesApproveScreen({ navigation }: any) {
         onPress={() =>
           navigation.navigate('ApproveDetail', {
             contactName: item.CompanyName,
-            _date: date.toISOString(),
+            _startDate: startDate.toISOString(),
+            _endDate: endDate.toISOString(),
             contactList: groupedList.map(g => g.CompanyName),
             initialIndex: index,
           })
@@ -221,15 +224,14 @@ export function SalesApproveScreen({ navigation }: any) {
         </View>
 
         <View className="px-4 pb-4">
-          <View className="flex-row gap-3 mb-4">
-            <View className="flex-1">
-              <DatePicker
-                value={date}
-                onChange={setDate}
-                placeholder={t('element.date')}
-              />
-            </View>
-          </View>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onChange={(start, end) => {
+                setStartDate(start);
+                setEndDate(end);
+              }}
+            />
 
           <View className="flex-row bg-secondary/10 p-1 rounded-xl">
             <TouchableOpacity

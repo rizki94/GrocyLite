@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeColor } from '../../lib/colors';
@@ -20,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Loading } from '../../components/ui/loading';
 import { ConnectionError } from '../../components/connection-error';
 import { cn } from '../../lib/utils';
+import { usePermissions } from '../../hooks/use-permissions';
 
 interface ProductStockItem {
   id: string | number;
@@ -35,11 +37,24 @@ interface ProductStockItem {
   ratio2: number;
   ratio3: number;
   ratio4: number;
-  PriceA1: number; PriceA2: number; PriceA3: number;
-  PriceB1: number; PriceB2: number; PriceB3: number;
-  PriceC1: number; PriceC2: number; PriceC3: number;
-  PriceD1: number; PriceD2: number; PriceD3: number;
-  PriceE1: number; PriceE2: number; PriceE3: number;
+  PriceA1: number;
+  PriceA2: number;
+  PriceA3: number;
+  PriceB1: number;
+  PriceB2: number;
+  PriceB3: number;
+  PriceC1: number;
+  PriceC2: number;
+  PriceC3: number;
+  PriceD1: number;
+  PriceD2: number;
+  PriceD3: number;
+  PriceE1: number;
+  PriceE2: number;
+  PriceE3: number;
+  PriceP1: number;
+  PriceP2: number;
+  PriceP3: number;
   [key: string]: any;
 }
 
@@ -51,6 +66,8 @@ export function ProductsScreen() {
   const navigation = useNavigation<any>();
   const colors = useThemeColor();
   const { apiClient } = useConnection();
+  const { hasPermission } = usePermissions();
+  const canSeeModal = hasPermission('see-modal-in-price-stock');
   const [isConnected, setIsConnected] = useState<boolean | null>(true);
 
   useEffect(() => {
@@ -76,14 +93,45 @@ export function ProductsScreen() {
   const [selectedPrices, setSelectedPrices] = useState<string[]>(['A']);
   const [showPriceFilter, setShowPriceFilter] = useState(false);
 
-  const priceTiers = ['A', 'B', 'C', 'D', 'E'];
+  const priceTiers = useMemo(() => {
+    const defaultTiers = ['A', 'B', 'C', 'D', 'E'];
+    return canSeeModal ? ['P', ...defaultTiers] : defaultTiers;
+  }, [canSeeModal]);
 
-  const tierColors: Record<string, { bg: string, text: string, border: string }> = {
-    A: { bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-100 dark:border-blue-500/20' },
-    B: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-100 dark:border-emerald-500/20' },
-    C: { bg: 'bg-orange-50 dark:bg-orange-500/10', text: 'text-orange-600 dark:text-orange-400', border: 'border-orange-100 dark:border-orange-500/20' },
-    D: { bg: 'bg-purple-50 dark:bg-purple-500/10', text: 'text-purple-600 dark:text-purple-400', border: 'border-purple-100 dark:border-purple-500/20' },
-    E: { bg: 'bg-rose-50 dark:bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-100 dark:border-rose-500/20' },
+  const tierColors: Record<
+    string,
+    { bg: string; text: string; border: string }
+  > = {
+    A: {
+      bg: 'bg-blue-50 dark:bg-blue-500/10',
+      text: 'text-blue-600 dark:text-blue-400',
+      border: 'border-blue-100 dark:border-blue-500/20',
+    },
+    B: {
+      bg: 'bg-emerald-50 dark:bg-emerald-500/10',
+      text: 'text-emerald-600 dark:text-emerald-400',
+      border: 'border-emerald-100 dark:border-emerald-500/20',
+    },
+    C: {
+      bg: 'bg-orange-50 dark:bg-orange-500/10',
+      text: 'text-orange-600 dark:text-orange-400',
+      border: 'border-orange-100 dark:border-orange-500/20',
+    },
+    D: {
+      bg: 'bg-purple-50 dark:bg-purple-500/10',
+      text: 'text-purple-600 dark:text-purple-400',
+      border: 'border-purple-100 dark:border-purple-500/20',
+    },
+    E: {
+      bg: 'bg-rose-50 dark:bg-rose-500/10',
+      text: 'text-rose-600 dark:text-rose-400',
+      border: 'border-rose-100 dark:border-rose-500/20',
+    },
+    P: {
+      bg: 'bg-rose-100 dark:bg-rose-900/20',
+      text: 'text-rose-700 dark:text-rose-300',
+      border: 'border-rose-200 dark:border-rose-700/30',
+    },
   };
 
   const PRODUCTS_CACHE_KEY = 'products_full_cache';
@@ -149,7 +197,10 @@ export function ProductsScreen() {
 
         if (pageData && pageData.length > 0) {
           allProducts = [...allProducts, ...pageData];
-          setSyncProgress({ current: allProducts.length, total: allProducts.length + 100 });
+          setSyncProgress({
+            current: allProducts.length,
+            total: allProducts.length + 100,
+          });
           currentPage++;
           hasMoreData = pageData.length === 100;
         } else {
@@ -158,22 +209,31 @@ export function ProductsScreen() {
       }
 
       // Save to cache
-      await AsyncStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(allProducts));
+      await AsyncStorage.setItem(
+        PRODUCTS_CACHE_KEY,
+        JSON.stringify(allProducts),
+      );
       await AsyncStorage.setItem(LAST_SYNC_KEY, new Date().toDateString());
 
       setAllProductsCache(allProducts);
       setLastSyncDate(new Date().toDateString());
-      setSyncProgress({ current: allProducts.length, total: allProducts.length });
+      setSyncProgress({
+        current: allProducts.length,
+        total: allProducts.length,
+      });
 
       if (forceSync) {
         Alert.alert(
           t('element.success'),
-          t('inventory.syncSuccess', { count: allProducts.length })
+          t('inventory.syncSuccess', { count: allProducts.length }),
         );
       }
     } catch (error: any) {
       console.error('Sync error:', error);
-      Alert.alert(t('element.error'), error.message || t('inventory.syncFailed'));
+      Alert.alert(
+        t('element.error'),
+        error.message || t('inventory.syncFailed'),
+      );
     } finally {
       setIsSyncing(false);
     }
@@ -186,10 +246,11 @@ export function ProductsScreen() {
     }
 
     const lowerQuery = query.toLowerCase();
-    return allProductsCache.filter(product =>
-      product.Name?.toLowerCase().includes(lowerQuery) ||
-      product.Category?.toLowerCase().includes(lowerQuery) ||
-      product.id?.toString().includes(lowerQuery)
+    return allProductsCache.filter(
+      product =>
+        product.Name?.toLowerCase().includes(lowerQuery) ||
+        product.Category?.toLowerCase().includes(lowerQuery) ||
+        product.id?.toString().includes(lowerQuery),
     );
   };
 
@@ -348,16 +409,22 @@ export function ProductsScreen() {
                 </Text>
               </View>
             )}
-            <View className={cn(
-              "px-2 py-0.5 rounded-full border",
-              item.Source === "PKP"
-                ? "bg-blue-100 border-blue-200 dark:bg-blue-500/20 dark:border-blue-500/30"
-                : "bg-emerald-100 border-emerald-200 dark:bg-emerald-500/20 dark:border-emerald-500/30"
-            )}>
-              <Text className={cn(
-                "text-[10px] font-black uppercase",
-                item.Source === "PKP" ? "text-blue-700 dark:text-blue-300" : "text-emerald-700 dark:text-emerald-300"
-              )}>
+            <View
+              className={cn(
+                'px-2 py-0.5 rounded-full border',
+                item.Source === 'PKP'
+                  ? 'bg-blue-100 border-blue-200 dark:bg-blue-500/20 dark:border-blue-500/30'
+                  : 'bg-emerald-100 border-emerald-200 dark:bg-emerald-500/20 dark:border-emerald-500/30',
+              )}
+            >
+              <Text
+                className={cn(
+                  'text-[10px] font-black uppercase',
+                  item.Source === 'PKP'
+                    ? 'text-blue-700 dark:text-blue-300'
+                    : 'text-emerald-700 dark:text-emerald-300',
+                )}
+              >
                 {item.Source}
               </Text>
             </View>
@@ -381,7 +448,7 @@ export function ProductsScreen() {
 
         {/* Prices Grid - Sophisticated Layout */}
         <View className="gap-2.5">
-          {selectedPrices.map((tier) => {
+          {selectedPrices.map(tier => {
             const colors = tierColors[tier] || tierColors['A'];
             const p1 = item[`Price${tier}1`];
             const p2 = item[`Price${tier}2`];
@@ -392,21 +459,44 @@ export function ProductsScreen() {
             return (
               <View
                 key={tier}
-                className={cn("p-2 rounded-xl border", colors.bg, colors.border)}
+                className={cn(
+                  'p-2 rounded-xl border',
+                  colors.bg,
+                  colors.border,
+                )}
               >
                 <View className="flex-row justify-between items-center mb-1.5 px-1">
-                  <Text className={cn("text-[10px] font-black uppercase tracking-widest", colors.text)}>
-                    Price {tier}
+                  <Text
+                    className={cn(
+                      'text-[10px] font-black uppercase tracking-widest',
+                      colors.text,
+                    )}
+                  >
+                    {tier === 'P' ? 'Modal Price' : `Price ${tier}`}
                   </Text>
-                  <View className={cn("px-1.5 py-0.5 rounded bg-white/40 dark:bg-black/20", colors.border)}>
-                    <Text className={cn("text-[8px] font-bold uppercase", colors.text)}>Matrix 1-2-3</Text>
+                  <View
+                    className={cn(
+                      'px-1.5 py-0.5 rounded bg-white/40 dark:bg-black/20',
+                      colors.border,
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        'text-[8px] font-bold uppercase',
+                        colors.text,
+                      )}
+                    >
+                      Matrix 1-2-3
+                    </Text>
                   </View>
                 </View>
 
                 <View className="flex-row gap-2">
                   {/* Price 1 */}
                   <View className="flex-1 bg-white/70 dark:bg-black/20 p-2 rounded-lg items-center">
-                    <Text className="text-[8px] text-muted-foreground font-bold uppercase mb-0.5">{tier}1</Text>
+                    <Text className="text-[8px] text-muted-foreground font-bold uppercase mb-0.5">
+                      {tier}1
+                    </Text>
                     <Text className="text-sm font-bold text-foreground">
                       {numberWithComma(p1)}
                     </Text>
@@ -414,7 +504,9 @@ export function ProductsScreen() {
 
                   {/* Price 2 */}
                   <View className="flex-1 bg-white/70 dark:bg-black/20 p-2 rounded-lg items-center">
-                    <Text className="text-[8px] text-muted-foreground font-bold uppercase mb-0.5">{tier}2</Text>
+                    <Text className="text-[8px] text-muted-foreground font-bold uppercase mb-0.5">
+                      {tier}2
+                    </Text>
                     <Text className="text-sm font-bold text-foreground">
                       {numberWithComma(p2)}
                     </Text>
@@ -422,7 +514,9 @@ export function ProductsScreen() {
 
                   {/* Price 3 */}
                   <View className="flex-1 bg-white/70 dark:bg-black/20 p-2 rounded-lg items-center">
-                    <Text className="text-[8px] text-muted-foreground font-bold uppercase mb-0.5">{tier}3</Text>
+                    <Text className="text-[8px] text-muted-foreground font-bold uppercase mb-0.5">
+                      {tier}3
+                    </Text>
                     <Text className="text-sm font-bold text-foreground">
                       {numberWithComma(p3)}
                     </Text>
@@ -470,7 +564,11 @@ export function ProductsScreen() {
             >
               <Download
                 size={20}
-                color={isSyncing || isConnected === false ? colors.mutedForeground : colors.primary}
+                color={
+                  isSyncing || isConnected === false
+                    ? colors.mutedForeground
+                    : colors.primary
+                }
               />
             </TouchableOpacity>
           </View>
@@ -505,7 +603,7 @@ export function ProductsScreen() {
           className="pb-4"
           contentContainerStyle={{ paddingLeft: 16, paddingRight: 32, gap: 8 }}
         >
-          {['ALL', ...priceTiers].map((tier) => {
+          {['ALL', ...priceTiers].map(tier => {
             const isAll = tier === 'ALL';
             const isSelected = isAll
               ? selectedPrices.length === priceTiers.length
@@ -521,7 +619,9 @@ export function ProductsScreen() {
                   } else {
                     if (isSelected) {
                       if (selectedPrices.length > 1) {
-                        setSelectedPrices(selectedPrices.filter(p => p !== tier));
+                        setSelectedPrices(
+                          selectedPrices.filter(p => p !== tier),
+                        );
                       }
                     } else {
                       setSelectedPrices([...selectedPrices, tier].sort());
@@ -529,23 +629,33 @@ export function ProductsScreen() {
                   }
                 }}
                 className={cn(
-                  "px-4 py-2 rounded-full border flex-row items-center",
+                  'px-4 py-2 rounded-full border flex-row items-center',
                   isSelected
-                    ? "bg-primary border-primary"
-                    : "bg-background border-border"
+                    ? 'bg-primary border-primary'
+                    : 'bg-background border-border',
                 )}
               >
                 {!isAll && (
-                  <View className={cn(
-                    "w-2.5 h-2.5 rounded-full mr-1.5",
-                    isSelected ? "bg-white" : colors.bg || "bg-primary"
-                  )} />
+                  <View
+                    className={cn(
+                      'w-2.5 h-2.5 rounded-full mr-1.5',
+                      isSelected ? 'bg-white' : colors.bg || 'bg-primary',
+                    )}
+                  />
                 )}
-                <Text className={cn(
-                  "text-xs font-black",
-                  isSelected ? "text-primary-foreground" : "text-muted-foreground"
-                )}>
-                  {isAll ? 'ALL PRICES' : `PRICE ${tier}`}
+                <Text
+                  className={cn(
+                    'text-xs font-black',
+                    isSelected
+                      ? 'text-primary-foreground'
+                      : 'text-muted-foreground',
+                  )}
+                >
+                  {isAll
+                    ? 'ALL PRICES'
+                    : tier === 'P'
+                      ? 'MODAL'
+                      : `PRICE ${tier}`}
                 </Text>
               </TouchableOpacity>
             );
@@ -573,7 +683,8 @@ export function ProductsScreen() {
         {!isSyncing && lastSyncDate && allProductsCache.length > 0 && (
           <View className="mx-4 mb-3 p-2 bg-secondary/30 rounded-lg">
             <Text className="text-muted-foreground text-xs text-center">
-              📦 {allProductsCache.length} {t('element.items')} • {t('inventory.lastSynced')}: {lastSyncDate}
+              📦 {allProductsCache.length} {t('element.items')} •{' '}
+              {t('inventory.lastSynced')}: {lastSyncDate}
             </Text>
           </View>
         )}

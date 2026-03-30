@@ -127,7 +127,12 @@ export default {
     deselectAll: 'Deselect All',
     selected: 'Selected',
     loadingMore: 'Loading More...',
-    process: 'Process'
+    process: 'Process',
+    delete: 'Delete',
+    confirm: 'Confirm',
+  },
+  dialog: {
+    deleteMessage: 'Are you sure you want to delete this group?',
   },
   login: {
     user: 'User',
@@ -235,6 +240,14 @@ export default {
     noRecordsPeriod: 'No records found for this period',
     omzetReport: 'Omzet Report',
     grandTotal: 'Grand Total',
+    groupsLabel: 'Groups',
+    groupSelected: 'Group Selected',
+    createGroup: 'Create Group',
+    updateGroup: 'Update Group',
+    editing: 'Editing',
+    enterGroupName: 'Enter group name...',
+    amtPrf: 'Amt / Prf',
+    wtVol: 'Wt / Vol',
   },
   approve: {
     salesApprove: {

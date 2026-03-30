@@ -128,6 +128,11 @@ export default {
     selected: 'Terpilih',
     loadingMore: 'Memuat lebih banyak...',
     process: 'Proses',
+    delete: 'Hapus',
+    confirm: 'Konfirmasi',
+  },
+  dialog: {
+    deleteMessage: 'Apakah Anda yakin ingin menghapus grup ini?',
   },
   login: {
     user: 'User',
@@ -222,7 +227,7 @@ export default {
     reportBySalesman: 'Laporan Per Salesman',
     reportByRoute: 'Laporan Per Rute',
     route: 'Rute',
-    released: 'Terkirim',
+    released: 'Dirilis',
     notReleased: 'Belum Terkirim',
     profitLoss: 'Laba Rugi',
     creditPayments: 'Pembayaran Piutang',
@@ -235,6 +240,14 @@ export default {
     noRecordsPeriod: 'Tidak ada data untuk periode ini',
     omzetReport: 'Laporan Omzet',
     grandTotal: 'Grand Total',
+    groupsLabel: 'Grup',
+    groupSelected: 'Grup Terpilih',
+    createGroup: 'Buat Grup',
+    updateGroup: 'Perbarui Grup',
+    editing: 'Mengedit',
+    enterGroupName: 'Masukkan nama grup...',
+    amtPrf: 'Amt / Prf',
+    wtVol: 'Wt / Vol',
   },
   approve: {
     salesApprove: {

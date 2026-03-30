@@ -20,6 +20,7 @@ import {
 } from './src/contexts/app-context';
 import useAuth from './src/hooks/use-auth';
 import useConnection from './src/hooks/use-connection';
+import { useAutoUpdate } from './src/hooks/use-auto-update';
 
 import { LoginScreen } from './src/screens/auth/login-screen';
 import { SplashScreen } from './src/screens/splash-screen';
@@ -49,6 +50,7 @@ export default function App() {
   const connection = useConnection();
   const { colorScheme, setColorScheme } = useColorScheme();
   const systemScheme = useRNColorScheme();
+  useAutoUpdate();
 
   // Resolve the actual active theme for StatusBar and Navigation
   const isDark = (colorScheme || systemScheme) === 'dark';

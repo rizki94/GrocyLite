@@ -5,7 +5,7 @@ import { dateFormatted, numberWithComma } from '../../utils/helpers';
 import { cn } from '../../lib/utils';
 import { useThemeColor } from '../../lib/colors';
 import { useTranslation } from 'react-i18next';
-import { DatePicker } from '../../components/ui/date-picker';
+import { DateRangePicker } from '../../components/ui/date-range-picker';
 import { Loading } from '../../components/ui/loading';
 import { ConnectionError } from '../../components/connection-error';
 import { Search, Users, ArrowLeft, RotateCcw } from 'lucide-react-native';
@@ -111,25 +111,17 @@ export function SalesReportScreen() {
           </TouchableOpacity>
         </View>
 
-        <View className="px-4 pb-4">
-          <View className="flex-row gap-3 mb-4">
-            <View className="flex-1">
-              <DatePicker
-                label={t('general.from')}
-                value={startDate}
-                onChange={setStartDate}
-              />
-            </View>
-            <View className="flex-1">
-              <DatePicker
-                label={t('general.to')}
-                value={endDate}
-                onChange={setEndDate}
-              />
-            </View>
-          </View>
+        <View className="px-4 pb-4 gap-2">
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+            }}
+          />
 
-          <View className="p-6 rounded-2xl bg-primary/5 border border-primary/30 items-center mb-6">
+          <View className="p-6 rounded-2xl bg-primary/5 border border-primary/30 items-center">
             <Text className="text-muted-foreground text-[10px] uppercase font-bold tracking-[2px] mb-2">
               {t('sales.grandTotal')}
             </Text>

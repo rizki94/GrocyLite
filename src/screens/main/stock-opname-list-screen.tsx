@@ -18,7 +18,7 @@ import {
 import { useThemeColor } from '../../lib/colors';
 import { useNavigation } from '@react-navigation/native';
 import { useConnection } from '../../hooks/use-connection';
-import { DatePicker } from '../../components/ui/date-picker';
+import { DateRangePicker } from '../../components/ui/date-range-picker';
 import { Loading } from '../../components/ui/loading';
 import { ConnectionError } from '../../components/connection-error';
 import moment from 'moment';
@@ -48,9 +48,7 @@ export function StockOpnameListScreen() {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Date range filter - default to current month
-  const [startDate, setStartDate] = useState<Date>(
-    moment().startOf('month').toDate(),
-  );
+  const [startDate, setStartDate] = useState<Date>(new Date());
   const [endDate, setEndDate] = useState<Date>(new Date());
 
   const fetchStockOpnames = useCallback(
@@ -200,22 +198,14 @@ export function StockOpnameListScreen() {
 
         {/* Date Filters */}
         <View className="px-4 pb-4">
-          <View className="flex-row gap-2">
-            <View className="flex-1">
-              <DatePicker
-                value={startDate}
-                onChange={setStartDate}
-                placeholder={t('general.from')}
-              />
-            </View>
-            <View className="flex-1">
-              <DatePicker
-                value={endDate}
-                onChange={setEndDate}
-                placeholder={t('general.to')}
-              />
-            </View>
-          </View>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+            }}
+          />
         </View>
       </View>
 

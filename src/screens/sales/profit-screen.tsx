@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,11 @@ import {
   Switch,
   TouchableOpacity,
   StyleSheet,
+  Modal,
+  TextInput,
+  Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFetchWithParams } from '../../hooks/use-fetch';
 import { dateFormatted, numberWithComma } from '../../utils/helpers';
 import { cn } from '../../lib/utils';
@@ -25,8 +29,11 @@ import {
   Weight as WeightIcon,
   CheckSquare,
   Square,
+  Edit2,
+  Trash2,
+  Plus,
 } from 'lucide-react-native';
-import { DatePicker } from '../../components/ui/date-picker';
+import { DateRangePicker } from '../../components/ui/date-range-picker';
 import { Card } from '../../components/ui/card';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Loading } from '../../components/ui/loading';
@@ -71,6 +78,31 @@ export function ProfitScreen() {
   const [activeTab, setActiveTab] = useState<'salesman' | 'route'>('salesman');
   const [isChangingTab, setIsChangingTab] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const [groups, setGroups] = useState<{ name: string; items: string[] }[]>([]);
+  const [editingGroupIndex, setEditingGroupIndex] = useState<number | null>(
+    null,
+  );
+  const [isGroupPromptVisible, setIsGroupPromptVisible] = useState(false);
+  const [groupNameInput, setGroupNameInput] = useState('');
+
+  useEffect(() => {
+    AsyncStorage.getItem(`profit_groups_${activeTab}`).then(res => {
+      if (res) setGroups(JSON.parse(res));
+      else setGroups([]);
+    });
+  }, [activeTab]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(`profit_groups_${activeTab}`, JSON.stringify(groups));
+  }, [groups, activeTab]);
+
+  const getItemId = useCallback(
+    (item: any, index: number) => {
+      return item.Salesman || `${activeTab}-${index}`;
+    },
+    [activeTab],
+  );
 
   const filters = useMemo(
     () => ({
@@ -151,8 +183,8 @@ export function ProfitScreen() {
   }, [omzets]);
 
   const selectedSummary = useMemo(() => {
-    const selectedData = displayedData.filter((_, idx) =>
-      selectedIds.includes(`${activeTab}-${idx}`),
+    const selectedData = displayedData.filter((item, idx) =>
+      selectedIds.includes(getItemId(item, idx)),
     );
     const amount = selectedData.reduce(
       (acc, curr) => acc + (Number(curr.Amount) || 0),
@@ -178,18 +210,116 @@ export function ProfitScreen() {
     setIsChangingTab(true);
     setActiveTab(tab);
     setSelectedIds([]);
+    setEditingGroupIndex(null);
     setTimeout(() => setIsChangingTab(false), 500);
   };
 
+  const selectAll = () => {
+    if (selectedIds.length === displayedData.length) setSelectedIds([]);
+    else setSelectedIds(displayedData.map((item, idx) => getItemId(item, idx)));
+  };
+
+  const alreadyGroupedItems = useMemo(() => {
+    return groups.reduce((acc, group, index) => {
+      if (index !== editingGroupIndex) {
+        group.items.forEach(i => acc.add(i));
+      }
+      return acc;
+    }, new Set<string>());
+  }, [groups, editingGroupIndex]);
+
+  const groupSummaries = useMemo(() => {
+    return groups.map(group => {
+      const summary = {
+        name: group.name,
+        Amount: 0,
+        Weight: 0,
+        Volume: 0,
+        Count: 0,
+        HPP: 0,
+        Profit: 0,
+        Margin: 0,
+        items: group.items,
+      };
+
+      group.items.forEach(itemId => {
+        const itemData = displayedData.find(
+          (r: any, idx: number) => getItemId(r, idx) === itemId,
+        );
+        if (itemData) {
+          summary.Amount += Number(itemData.Amount || 0);
+          summary.Weight += Number(itemData.Weight || 0);
+          summary.Volume += Number(itemData.Volume || 0);
+          summary.Count += Number(itemData.Count || 0);
+          summary.HPP += Number(itemData.HPP || 0);
+          summary.Profit += Number(itemData.Profit || 0);
+        }
+      });
+      summary.Margin = summary.HPP ? (summary.Profit / summary.HPP) * 100 : 0;
+      return summary;
+    });
+  }, [groups, displayedData, getItemId]);
+
   const toggleSelection = (id: string) => {
+    if (alreadyGroupedItems.has(id)) return;
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id],
     );
   };
 
-  const selectAll = () => {
-    if (selectedIds.length === displayedData.length) setSelectedIds([]);
-    else setSelectedIds(displayedData.map((_, idx) => `${activeTab}-${idx}`));
+  const handleCreateGroup = () => {
+    if (selectedIds.length === 0) return;
+    setGroupNameInput(selectedIds[0] || 'Group 1');
+    setIsGroupPromptVisible(true);
+  };
+
+  const submitGroup = () => {
+    if (editingGroupIndex !== null) {
+      setGroups(prev => {
+        const next = [...prev];
+        next[editingGroupIndex] = { name: groupNameInput, items: selectedIds };
+        return next;
+      });
+      setEditingGroupIndex(null);
+    } else {
+      setGroups(prev => [
+        ...prev,
+        { name: groupNameInput, items: selectedIds },
+      ]);
+    }
+    setSelectedIds([]);
+    setIsGroupPromptVisible(false);
+  };
+
+  const handleEditGroup = (index: number) => {
+    setEditingGroupIndex(index);
+    setSelectedIds(groups[index].items);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingGroupIndex(null);
+    setSelectedIds([]);
+  };
+
+  const handleDeleteGroup = (index: number) => {
+    Alert.alert(
+      t('general.delete') || 'Delete',
+      t('dialog.deleteMessage') || 'Are you sure?',
+      [
+        { text: t('general.cancel') || 'Cancel', style: 'cancel' },
+        {
+          text: t('general.confirm') || 'Confirm',
+          style: 'destructive',
+          onPress: () => {
+            setGroups(prev => prev.filter((_, i) => i !== index));
+            if (editingGroupIndex === index) {
+              setEditingGroupIndex(null);
+              setSelectedIds([]);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const insets = useSafeAreaInsets();
@@ -222,16 +352,18 @@ export function ProfitScreen() {
         </View>
 
         <View className="px-4 pb-4">
-          <View className="flex-row gap-2 mb-3">
-            <View className="flex-1">
-              <DatePicker value={startDate} onChange={setStartDate} />
-            </View>
-            <View className="flex-1">
-              <DatePicker value={endDate} onChange={setEndDate} />
-            </View>
+          <View className="mb-3">
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onChange={(start, end) => {
+                setStartDate(start);
+                setEndDate(end);
+              }}
+            />
           </View>
           <View className="flex-row items-center justify-between">
-            <View className="flex-row bg-secondary/20 p-0.5 rounded-lg">
+            <View className="flex-row bg-secondary p-0.5 rounded-lg">
               <TouchableOpacity
                 onPress={() => handleTabChange('salesman')}
                 style={[
@@ -281,7 +413,7 @@ export function ProfitScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-            <View className="flex-row items-center bg-secondary/10 px-3 py-1.5 rounded-lg">
+            <View className="flex-row items-center bg-secondary px-3 py-1.5 rounded-lg">
               <Text className="text-[10px] font-bold text-muted-foreground uppercase mr-2.5">
                 {t('sales.released')}
               </Text>
@@ -297,9 +429,95 @@ export function ProfitScreen() {
         </View>
       </View>
 
+      {/* Pinned Cards for Groups */}
+      {groupSummaries.length > 0 && (
+        <View className="bg-card border-b border-border shadow-sm z-10 pt-3 pb-4">
+          <View className="flex-row justify-between items-center mb-3 px-4">
+            <Text className="text-xs font-bold text-muted-foreground uppercase">
+              {t('sales.groupsLabel')}
+              {editingGroupIndex !== null && (
+                <Text className="text-primary italic"> ({t('sales.editing')})</Text>
+              )}
+            </Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 12, paddingHorizontal: 16 }}
+          >
+            {groupSummaries.map((summary, index) => {
+              const isEditing = editingGroupIndex === index;
+              return (
+                <Card
+                  key={index}
+                  className={cn(
+                    'p-3 w-64 border',
+                    isEditing ? 'border-primary shadow-md' : 'border-border',
+                  )}
+                >
+                  <View className="flex-row justify-between items-start mb-2">
+                    <View className="flex-1">
+                      <Text className="font-bold text-primary truncate">
+                        {summary.name}
+                      </Text>
+                      <Text className="text-[10px] text-muted-foreground text-wrap">
+                        {summary.items.join(', ')}
+                      </Text>
+                    </View>
+                    <View className="flex-row gap-2 ml-2">
+                      <TouchableOpacity
+                        onPress={() => handleEditGroup(index)}
+                        className="p-1.5 rounded-md bg-primary/10"
+                      >
+                        <Edit2 size={12} color={colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteGroup(index)}
+                        className="p-1.5 rounded-md bg-destructive/10"
+                      >
+                        <Trash2 size={12} color={colors.destructive} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View className="flex-row bg-secondary/10 rounded-lg gap-2">
+                    <View className="flex-1">
+                      <Text className="text-[9px] uppercase text-muted-foreground font-bold">
+                        {t('sales.amtPrf')}
+                      </Text>
+                      <Text className="text-xs text-secondary-foreground font-bold">
+                        {numberWithComma(summary.Amount, 0)}
+                      </Text>
+                      <Text className="text-xs font-bold text-green-600">
+                        {numberWithComma(summary.Profit, 0)}
+                      </Text>
+                    </View>
+                    <View className="w-[1px] bg-border/50" />
+                    <View className="flex-1 items-end">
+                      <Text className="text-[9px] uppercase text-muted-foreground font-bold">
+                        {t('sales.wtVol')}
+                      </Text>
+                      <Text className="text-xs text-secondary-foreground font-bold">
+                        {numberWithComma(summary.Weight, 0)}
+                      </Text>
+                      <Text className="text-xs text-secondary-foreground font-bold">
+                        {numberWithComma(summary.Volume, 0)}
+                      </Text>
+                    </View>
+                  </View>
+                </Card>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
       <ScrollView className="flex-1">
         {errorOmzet && omzets.length === 0 ? (
-          <ConnectionError onRetry={onRefresh} message={errorOmzet} />
+          <ConnectionError
+            onRetry={onRefresh}
+            message={errorOmzet || undefined}
+          />
         ) : (
           <>
             <View className="p-4">
@@ -365,18 +583,20 @@ export function ProfitScreen() {
                 const profit = Number(item.Profit || 0);
                 const margin =
                   Number(item.HPP) > 0 ? (profit / Number(item.HPP)) * 100 : 0;
-                const itemId = `${activeTab}-${index}`;
+                const itemId = getItemId(item, index);
                 const isSelected = selectedIds.includes(itemId);
+                const isAlreadyGrouped = alreadyGroupedItems.has(itemId);
                 return (
                   <Card
                     key={itemId}
                     className={cn(
-                      'mb-4 overflow-hidden border bg-card',
+                      'mb-4 overflow-hidden border bg-card relative opacity-100',
                       isSelected ? 'border-primary/50' : 'border-border',
+                      isAlreadyGrouped && 'opacity-50',
                     )}
                   >
                     <TouchableOpacity
-                      activeOpacity={0.7}
+                      activeOpacity={isAlreadyGrouped ? 1 : 0.7}
                       onPress={() => toggleSelection(itemId)}
                       className="p-4"
                     >
@@ -477,11 +697,46 @@ export function ProfitScreen() {
             <Text className="text-xs font-black text-primary uppercase">
               {selectedIds.length} {t('general.selected')}
             </Text>
-            <TouchableOpacity onPress={() => setSelectedIds([])}>
-              <Text className="text-[10px] font-bold text-muted-foreground uppercase">
-                Clear
-              </Text>
-            </TouchableOpacity>
+            <View className="flex-row items-center gap-4">
+              <TouchableOpacity onPress={() => setSelectedIds([])}>
+                <Text className="text-[10px] font-bold text-muted-foreground uppercase">
+                  Clear
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View className="flex-row gap-2 mb-3">
+            {editingGroupIndex !== null ? (
+              <>
+                <TouchableOpacity
+                  className="flex-1 bg-primary py-2 rounded-xl items-center flex-row justify-center"
+                  onPress={setIsGroupPromptVisible.bind(null, true)}
+                >
+                  <Text className="text-xs font-bold text-white uppercase">
+                    {t('sales.updateGroup')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="flex-1 bg-destructive/10 border border-destructive/20 py-2 rounded-xl items-center flex-row justify-center"
+                  onPress={handleCancelEdit}
+                >
+                  <Text className="text-xs font-bold text-destructive uppercase">
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                onPress={handleCreateGroup}
+                className="flex-1 bg-primary/10 border border-primary/20 py-2 rounded-xl items-center flex-row justify-center"
+              >
+                <Plus size={14} color={colors.primary} />
+                <Text className="ml-1 text-xs font-bold text-primary uppercase">
+                  {t('sales.groupSelected')}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View className="flex-row gap-2">
             <View className="flex-1 bg-primary/5 p-2 rounded-xl items-center border border-primary/30">
@@ -520,6 +775,37 @@ export function ProfitScreen() {
         </View>
       )}
       <Loading isLoading={loadingOmzet || loadingRoute || isChangingTab} />
+      <Modal visible={isGroupPromptVisible} transparent animationType="fade">
+        <View className="flex-1 bg-black/50 justify-center items-center p-4">
+          <View className="bg-card w-full max-w-sm rounded-2xl p-4">
+            <Text className="text-lg font-bold mb-4 text-foreground">
+              {editingGroupIndex !== null ? t('sales.updateGroup') : t('sales.createGroup')}
+            </Text>
+            <TextInput
+              value={groupNameInput}
+              onChangeText={setGroupNameInput}
+              placeholder={t('sales.enterGroupName')}
+              placeholderTextColor="#888"
+              className="border border-border rounded-lg px-3 py-2 text-foreground mb-4"
+              autoFocus
+            />
+            <View className="flex-row justify-end gap-2">
+              <TouchableOpacity
+                onPress={() => setIsGroupPromptVisible(false)}
+                className="px-4 py-2 rounded-lg items-center bg-secondary/20"
+              >
+                <Text className="font-bold text-muted-foreground">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={submitGroup}
+                className="px-4 py-2 rounded-lg items-center bg-primary"
+              >
+                <Text className="font-bold text-white">Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

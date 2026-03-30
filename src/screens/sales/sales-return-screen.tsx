@@ -17,7 +17,7 @@ import {
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useThemeColor } from '../../lib/colors';
-import { DatePicker } from '../../components/ui/date-picker';
+import { DateRangePicker } from '../../components/ui/date-range-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Loading } from '../../components/ui/loading';
@@ -207,23 +207,15 @@ export function SalesReturnScreen() {
           </TouchableOpacity>
         </View>
 
-        <View className="px-4 pb-4">
-          <View className="flex-row gap-3 mt-4 mb-4">
-            <View className="flex-1">
-              <DatePicker
-                label={t('general.from')}
-                value={startDate}
-                onChange={setStartDate}
-              />
-            </View>
-            <View className="flex-1">
-              <DatePicker
-                label={t('general.to')}
-                value={endDate}
-                onChange={setEndDate}
-              />
-            </View>
-          </View>
+        <View className="px-4 pb-4 gap-2">
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+            }}
+          />
 
           <View className="p-6 rounded-2xl bg-primary border border-primary/20 shadow-lg items-center">
             <Text className="text-primary-foreground text-xs font-bold uppercase tracking-[2px] opacity-80 mb-2">
