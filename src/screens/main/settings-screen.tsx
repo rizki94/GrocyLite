@@ -10,6 +10,8 @@ import {
   Globe,
   ChevronRight,
   Check,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react-native';
 
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +21,7 @@ import { useThemeColor } from '../../lib/colors';
 import DeviceInfo from 'react-native-device-info';
 import Logo from '../../assets/logo.svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAutoUpdate } from '../../hooks/use-auto-update';
 
 export function SettingsScreen() {
   const navigation = useNavigation();
@@ -28,6 +31,7 @@ export function SettingsScreen() {
   const { i18n, t } = useTranslation();
   const colors = useThemeColor();
   const insets = useSafeAreaInsets();
+  const { checkForUpdates, isChecking } = useAutoUpdate();
 
   const [themePreference, setThemePreference] = useState<
     'light' | 'dark' | 'system'
@@ -169,9 +173,34 @@ export function SettingsScreen() {
         </Card>
 
         <Text className="text-xs font-black text-muted-foreground uppercase tracking-[3px] mb-4 ml-1">
-          {t('settings.account.title')}
+          {t('settings.system') || 'System'}
         </Text>
         <Card className="mb-8 overflow-hidden border border-border/50 bg-card rounded-3xl">
+          <Pressable
+            className="flex-row items-center justify-between p-5 border-b border-border/10 active:bg-secondary/20"
+            onPress={() => checkForUpdates(true)}
+            disabled={isChecking}
+          >
+            <View className="flex-row items-center">
+              <View className="w-10 h-10 rounded-xl bg-orange-500/10 dark:bg-orange-400/20 items-center justify-center mr-4">
+                <RefreshCw
+                  size={20}
+                  color="#f97316"
+                />
+              </View>
+              <Text className="text-foreground font-bold">
+                {t('settings.checkUpdates') || 'Check for Updates'}
+              </Text>
+            </View>
+            <View className="flex-row items-center">
+              {isChecking ? (
+                <Loader2 size={16} color={colors.mutedForeground} />
+              ) : (
+                <ChevronRight size={16} color={colors.mutedForeground} />
+              )}
+            </View>
+          </Pressable>
+
           <Pressable
             className="flex-row items-center justify-between p-5 active:bg-destructive/10"
             onPress={logout}

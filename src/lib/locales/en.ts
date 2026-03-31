@@ -185,6 +185,8 @@ export default {
     },
     theme: 'Theme',
     language: 'Language',
+    system: 'System',
+    checkUpdates: 'Check for Updates',
     selectLanguage: {
       english: 'English',
       bahasa: 'Bahasa Indonesia',
