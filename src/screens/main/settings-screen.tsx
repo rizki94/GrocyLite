@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { useTranslation } from 'react-i18next';
 import { useThemeColor } from '../../lib/colors';
+import DeviceInfo from 'react-native-device-info';
 import Logo from '../../assets/logo.svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -63,9 +64,10 @@ export function SettingsScreen() {
   ];
 
   const roleName = user?.role_name || user?.role;
-  const displayRole = roleName?.toLowerCase() === 'administrator'
-    ? t('settings.administrator')
-    : (roleName || t('settings.administrator'));
+  const displayRole =
+    roleName?.toLowerCase() === 'administrator'
+      ? t('settings.administrator')
+      : roleName || t('settings.administrator');
 
   return (
     <View
@@ -188,7 +190,7 @@ export function SettingsScreen() {
         <View className="items-center mt-4">
           <Logo width={48} height={48} opacity={0.3} />
           <Text className="text-[10px] font-black text-muted-foreground uppercase tracking-[2px] mt-4 opacity-50">
-            {t('settings.version')} 1.0.0 (Build 504)
+            {t('settings.version')} {DeviceInfo.getVersion()}
           </Text>
         </View>
       </ScrollView>

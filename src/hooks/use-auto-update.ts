@@ -74,21 +74,40 @@ export const useAutoUpdate = () => {
 
   const initiateDownload = async (url: string) => {
     const { dirs } = ReactNativeBlobUtil.fs;
-    const apkFilePath = `${dirs.CacheDir}/GrocyLite-latest.apk`;
+    const fileName = 'GrocyLite-latest.apk';
+    const apkFilePath = `${dirs.DownloadDir}/${fileName}`;
 
     try {
+      // Alert user the download is starting
+      Alert.alert(
+        'Downloading...',
+        'The update is downloading in the background. Please check your notification bar for progress.',
+        [{ text: 'OK' }]
+      );
+
+      // Use Android Download Manager for visible progress and auto-registration
       const res = await ReactNativeBlobUtil.config({
-        path: apkFilePath,
-        fileCache: true,
+        addAndroidDownloads: {
+          useDownloadManager: true,
+          notification: true,
+          path: apkFilePath,
+          description: 'Downloading GrocyLite update...',
+          mime: 'application/vnd.android.package-archive',
+          mediaScannable: true,
+        },
       }).fetch('GET', url);
 
-      // Trigger Android's package installer
+      // Trigger Android's package installer with FileProvider authority
       ReactNativeBlobUtil.android.actionViewIntent(
         res.path(),
-        'application/vnd.android.package-archive'
+        'application/vnd.android.package-archive',
+        'com.grocylite.provider'
       );
     } catch (error) {
-      Alert.alert('Download Error', 'Could not download the update. Please try again later.');
+      Alert.alert(
+        'Download Error',
+        'Could not download the update. Please try again later or check your internet connection.'
+      );
       console.error('Update download failed:', error);
     }
   };
