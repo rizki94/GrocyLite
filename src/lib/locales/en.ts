@@ -21,11 +21,11 @@ export default {
   },
   alert: {
     unsavedChanges: {
-      title: 'Discard changes?',
-      content:
-        'You have unsaved changes. Are you sure to discard them and leave the screen?',
-      no: "Don't leave",
-      yes: 'Discard',
+      title: 'Discard Changes?',
+      content: 'You have unsaved changes. Are you sure you want to leave this page?',
+      no: 'Stay Here',
+      yes: 'Discard & Exit',
+      notification: 'Unsaved Changes Found',
     },
     deleteItem: {
       title: 'Delete Item?',
@@ -122,6 +122,8 @@ export default {
     noData: 'No data',
     loadingApp: 'Loading Grocy Lite...',
     loading: 'Loading...',
+    saving: 'Saving...',
+    syncing: 'Syncing...',
     searching: 'Searching',
     selectAll: 'Select All',
     deselectAll: 'Deselect All',
@@ -130,6 +132,7 @@ export default {
     process: 'Process',
     delete: 'Delete',
     confirm: 'Confirm',
+    saveNow: 'Save Now',
   },
   dialog: {
     deleteMessage: 'Are you sure you want to delete this group?',

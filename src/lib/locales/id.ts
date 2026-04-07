@@ -22,10 +22,10 @@ export default {
   alert: {
     unsavedChanges: {
       title: 'Abaikan Perubahan?',
-      content:
-        'Kamu memiliki perubahan yang belum disimpan, Apakah kamu yakin untuk meninggalkan layar?',
-      no: 'Jangan Tinggalkan',
-      yes: 'Abaikan',
+      content: 'Ada perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini?',
+      no: 'Tetap di Sini',
+      yes: 'Abaikan & Keluar',
+      notification: 'Perubahan Belum Disimpan',
     },
     deleteItem: {
       title: 'Hapus Item?',
@@ -122,6 +122,8 @@ export default {
     noData: 'Tidak ada data',
     loadingApp: 'Memuat Grocy Lite...',
     loading: 'Memuat...',
+    saving: 'Menyimpan...',
+    syncing: 'Menyinkronkan...',
     searching: 'Mencari',
     selectAll: 'Pilih Semua',
     deselectAll: 'Batalkan Pilihan',
@@ -130,6 +132,7 @@ export default {
     process: 'Proses',
     delete: 'Hapus',
     confirm: 'Konfirmasi',
+    saveNow: 'Simpan Sekarang',
   },
   dialog: {
     deleteMessage: 'Apakah Anda yakin ingin menghapus grup ini?',
