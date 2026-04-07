@@ -77,6 +77,7 @@ interface Product {
   Rat3: number;
   Rat4: number;
   stock?: string | number;
+  source?: string;
 }
 
 interface InvoiceItem {
@@ -97,6 +98,7 @@ interface InvoiceItem {
   ratio4?: number;
   sys_stock?: string | number;
   hide?: boolean;
+  source?: string;
 }
 
 const ProductQuantityForm = memo(
@@ -222,7 +224,7 @@ const InvoiceItemRow = memo(
     colors,
     t,
   }: any) => {
-    const source = getProductSource(item.product_id);
+    const source = item.source || getProductSource(item.product_id);
     const diffValue = getDifference(item);
     const sysValue =
       item.sys_stock !== undefined
@@ -478,6 +480,7 @@ export function StockOpnameScreen() {
             Rat3: p.ratio3 || p.Rat3 || 1,
             Rat4: p.ratio4 || p.Rat4 || 1,
             stock: p.Stock || p.stock || 0,
+            source: p.Source || p.source || 'NON',
           })),
         );
       }
@@ -560,6 +563,7 @@ export function StockOpnameScreen() {
         Rat3: p.ratio3 || 1,
         Rat4: p.ratio4 || 1,
         stock: p.Stock || 0,
+        source: p.Source || 'NON',
       }));
 
       setCachedProducts(mapped);
@@ -710,6 +714,7 @@ export function StockOpnameScreen() {
               ? item.sys_stock
               : (stock?.find((s: any) => s.PKey === item.product_id)?.Stock ??
                 0),
+          source: item.source || 'NON',
         })),
       };
 
@@ -899,6 +904,7 @@ export function StockOpnameScreen() {
       ratio2: selectedProduct.Rat2,
       ratio3: selectedProduct.Rat3,
       ratio4: selectedProduct.Rat4,
+      source: selectedProduct.source || 'NON',
     };
 
     setItems([...items, newItem]);
@@ -960,6 +966,7 @@ export function StockOpnameScreen() {
       Rat2: item.ratio2 || 1,
       Rat3: item.ratio3 || 1,
       Rat4: item.ratio4 || 1,
+      source: item.source || 'NON',
     };
 
     setSelectedProduct(prod as Product);
