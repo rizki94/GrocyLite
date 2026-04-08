@@ -1,11 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFetchWithParams } from '../../hooks/use-fetch';
 import { dateFormatted, numberWithComma } from '../../utils/helpers';
@@ -16,9 +10,6 @@ import {
   RotateCcw,
   ChevronRight,
   Search,
-  ChevronDown,
-  ChevronUp,
-  LayoutGrid,
   TrendingUp,
   TrendingDown,
 } from 'lucide-react-native';
@@ -224,16 +215,16 @@ export function SalesApproveScreen({ navigation }: any) {
         </View>
 
         <View className="px-4 pb-4">
-            <DateRangePicker
-              startDate={startDate}
-              endDate={endDate}
-              onChange={(start, end) => {
-                setStartDate(start);
-                setEndDate(end);
-              }}
-            />
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+            }}
+          />
 
-          <View className="flex-row bg-secondary/10 p-1 rounded-xl">
+          <View className="flex-row bg-secondary/10 p-1 mt-2 rounded-xl">
             <TouchableOpacity
               onPress={() => setStatus(false)}
               className="flex-1 py-2 items-center rounded-lg"
