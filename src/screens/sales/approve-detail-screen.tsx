@@ -75,6 +75,8 @@ export function ApproveDetailScreen({ navigation, route }: any) {
   const { apiClient } = useConnection();
 
   const {
+    _startDate,
+    _endDate,
     _date,
     contactList = [],
     initialIndex = 0,
@@ -111,10 +113,11 @@ export function ApproveDetailScreen({ navigation, route }: any) {
     {
       params: {
         company_name: targetContact,
-        date: dateFormatted(new Date(_date || new Date())),
+        startDate: _startDate ? dateFormatted(new Date(_startDate)) : dateFormatted(new Date(_date || new Date())),
+        endDate: _endDate ? dateFormatted(new Date(_endDate)) : dateFormatted(new Date(_date || new Date())),
       },
     },
-    { targetContact, _date },
+    { targetContact, _startDate, _endDate, _date },
     refreshing,
   );
 
