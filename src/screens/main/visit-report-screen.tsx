@@ -41,6 +41,8 @@ export function VisitReportScreen({ navigation }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [photo, setPhoto] = useState<any>(null);
   const [location, setLocation] = useState<any>(null);
+  const [showAll, setShowAll] = useState(false);
+  const PAGE_SIZE = 30;
 
   const { data: contacts, isLoading: loadingContacts } = useFetch(
     '/api/contact/customer/active',
@@ -48,11 +50,15 @@ export function VisitReportScreen({ navigation }: any) {
 
   const filteredContacts = React.useMemo(() => {
     if (!Array.isArray(contacts)) return [];
-    if (!searchQuery) return contacts.slice(0, 10);
-    return contacts
-      .filter(c => c.name?.toLowerCase().includes(searchQuery.toLowerCase()))
-      .slice(0, 20);
-  }, [contacts, searchQuery]);
+    if (searchQuery) {
+      // Show ALL matches when searching
+      return contacts.filter(c =>
+        c.name?.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
+    }
+    // Default: first PAGE_SIZE, expandable
+    return showAll ? contacts : contacts.slice(0, PAGE_SIZE);
+  }, [contacts, searchQuery, showAll]);
 
   const takePhoto = async () => {
     const options: any = {
@@ -278,6 +284,18 @@ export function VisitReportScreen({ navigation }: any) {
             <Text className="p-4 text-center text-xs text-muted-foreground">
               {t('attendance.loadingCustomers')}
             </Text>
+          )}
+
+          {/* Load more button when not searching and list is capped */}
+          {!searchQuery && !showAll && Array.isArray(contacts) && contacts.length > PAGE_SIZE && (
+            <TouchableOpacity
+              onPress={() => setShowAll(true)}
+              className="p-3 items-center border-t border-border"
+            >
+              <Text className="text-primary text-sm font-bold">
+                {t('general.showAll') || 'Show all'} ({contacts.length})
+              </Text>
+            </TouchableOpacity>
           )}
         </Card>
 

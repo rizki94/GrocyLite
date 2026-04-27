@@ -1,4 +1,5 @@
 import { useColorScheme } from 'nativewind';
+import { useColorScheme as useRNColorScheme } from 'react-native';
 
 // Theme colors that match global.css
 export const colors = {
@@ -42,7 +43,8 @@ export const colors = {
 
 export function useThemeColor() {
   const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const systemScheme = useRNColorScheme();
+  const isDark = (colorScheme || systemScheme) === 'dark';
 
   return {
     background: isDark ? colors.dark.background : colors.light.background,

@@ -108,6 +108,8 @@ export default {
     ok: 'Ok',
     cancel: 'Cancel',
     tryAgain: 'Try Again',
+    camera: 'Camera',
+    gallery: 'Gallery',
     search: 'Search',
     status: 'Status',
     pickDate: 'Pick Date',
@@ -219,6 +221,11 @@ export default {
     scanQr: 'Scan QR',
     stockBreakdown: 'Stock Breakdown',
     purchaseReport: 'Purchase Report',
+  },
+  purchase: {
+    uploadInvoiceImage: 'Upload Invoice Image',
+    selectImageSource: 'Select image source',
+    status: 'OP Status',
   },
   debtPayments: {
     currentDebt: 'Current Debt',
@@ -449,5 +456,6 @@ export default {
   },
   error: {
     serverNotAvailable: 'Server Not Available',
+    failedToUpload: 'Failed to upload image',
   },
 };

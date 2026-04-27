@@ -108,6 +108,8 @@ export default {
     ok: 'Ok',
     cancel: 'Batal',
     tryAgain: 'Coba Lagi',
+    camera: 'Kamera',
+    gallery: 'Galeri',
     search: 'Cari',
     status: 'Status',
     pickDate: 'Pilih Tanggal',
@@ -219,6 +221,11 @@ export default {
     scanQr: 'Pindai QR',
     stockBreakdown: 'Rincian Stok',
     purchaseReport: 'Laporan Pembelian',
+  },
+  purchase: {
+    uploadInvoiceImage: 'Unggah Gambar Faktur',
+    selectImageSource: 'Pilih sumber gambar',
+    status: 'Status OP',
   },
   debtPayments: {
     currentDebt: 'Hutang Saat Ini',
@@ -448,5 +455,6 @@ export default {
   },
   error: {
     serverNotAvailable: 'Server Tidak Tersedia',
+    failedToUpload: 'Gagal mengunggah gambar',
   },
 };

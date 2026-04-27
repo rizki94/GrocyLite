@@ -286,7 +286,6 @@ const InvoiceItemRow = memo(
               </View>
             </TouchableOpacity>
           </View>
-          {status === 0 && (
             <View className="flex-row gap-1.5">
               <TouchableOpacity
                 onPress={handleRefresh}
@@ -315,7 +314,6 @@ const InvoiceItemRow = memo(
                 <Trash2 size={14} color="#ef4444" />
               </TouchableOpacity>
             </View>
-          )}
         </View>
 
         <View className="flex-row bg-secondary/5 px-2 py-2 border-t border-border/30">
@@ -434,7 +432,7 @@ export function StockOpnameScreen() {
   // Prevent back if unsaved changes
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
-      if (!isDirty || status === 1) {
+      if (!isDirty) {
         return;
       }
 
@@ -770,108 +768,6 @@ export function StockOpnameScreen() {
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const handleApprove = async () => {
-    Alert.alert(
-      t('warehouse.stockOpname.alertApproveTitle'),
-      t('warehouse.stockOpname.alertApproveContent'),
-      [
-        { text: t('element.cancel'), style: 'cancel' },
-        {
-          text: t('approve.salesApprove.approve'),
-          onPress: async () => {
-            try {
-              if (isOffline) {
-                await addToQueue(
-                  '/api/stock_opname/approve',
-                  'POST',
-                  { invoice: _invoice },
-                  {},
-                  t('warehouse.stockOpname.approveSo', { invoice: _invoice }),
-                );
-                ToastAndroid.show(
-                  t('element.savedOffline'),
-                  ToastAndroid.SHORT,
-                );
-                setStatus(1);
-                return;
-              }
-              const response = await apiClient.post(
-                '/api/stock_opname/approve',
-                { invoice: _invoice },
-              );
-              if (response.data.status === 200) {
-                ToastAndroid.show(
-                  t('approve.salesApprove.approved'),
-                  ToastAndroid.SHORT,
-                );
-                setStatus(1);
-              } else {
-                ToastAndroid.show(
-                  t('approve.salesApprove.failedUpdateStatus'),
-                  ToastAndroid.SHORT,
-                );
-              }
-            } catch (e: any) {
-              ToastAndroid.show(
-                e.message || t('error.serverNotAvailable'),
-                ToastAndroid.SHORT,
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleOpen = async () => {
-    Alert.alert(
-      t('warehouse.stockOpname.alertReopenTitle'),
-      t('warehouse.stockOpname.alertReopenContent'),
-      [
-        { text: t('element.cancel'), style: 'cancel' },
-        {
-          text: t('general.open'),
-          onPress: async () => {
-            try {
-              if (isOffline) {
-                await addToQueue(
-                  '/api/stock_opname/open',
-                  'POST',
-                  { invoice: _invoice },
-                  {},
-                  t('warehouse.stockOpname.reopenSo', { invoice: _invoice }),
-                );
-                ToastAndroid.show(
-                  t('element.savedOffline'),
-                  ToastAndroid.SHORT,
-                );
-                setStatus(0);
-                return;
-              }
-              const response = await apiClient.post('/api/stock_opname/open', {
-                invoice: _invoice,
-              });
-              if (response.data.status === 200) {
-                ToastAndroid.show(t('general.open'), ToastAndroid.SHORT);
-                setStatus(0);
-              } else {
-                ToastAndroid.show(
-                  t('approve.salesApprove.failedUpdateStatus'),
-                  ToastAndroid.SHORT,
-                );
-              }
-            } catch (e: any) {
-              ToastAndroid.show(
-                e.message || t('error.serverNotAvailable'),
-                ToastAndroid.SHORT,
-              );
-            }
-          },
-        },
-      ],
-    );
   };
 
   const addItem = (qty: typeof initialQty) => {
@@ -1504,7 +1400,7 @@ export function StockOpnameScreen() {
         )}
 
         {/* Edit mode form (separate since isEdit hides the search zone above) */}
-        {status === 0 && isEdit && selectedProduct && (
+        {isEdit && selectedProduct && (
           <View className="bg-card border-b-2 border-blue-500/20 shadow-lg">
             <ProductQuantityForm
               selectedProduct={selectedProduct}
@@ -1660,30 +1556,12 @@ export function StockOpnameScreen() {
         className="absolute right-6 flex-row gap-3"
         style={{ bottom: insets.bottom + 24 }}
       >
-        {Boolean(_invoice && status === 0) && (
-          <TouchableOpacity
-            onPress={handleApprove}
-            className="bg-green-600 p-5 rounded-full shadow-2xl items-center justify-center"
-          >
-            <CheckCircle size={28} color="#fff" />
-          </TouchableOpacity>
-        )}
-        {Boolean(_invoice && status === 1) && (
-          <TouchableOpacity
-            onPress={handleOpen}
-            className="bg-yellow-600 p-5 rounded-full shadow-2xl items-center justify-center"
-          >
-            <Unlock size={28} color="#fff" />
-          </TouchableOpacity>
-        )}
-        {status === 0 && (
-          <TouchableOpacity
-            onPress={handleSave}
-            className="bg-primary p-5 rounded-full shadow-2xl items-center justify-center"
-          >
-            <Save size={28} color="#fff" />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          onPress={handleSave}
+          className="bg-primary p-5 rounded-full shadow-2xl items-center justify-center"
+        >
+          <Save size={28} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       {/* Modals */}
