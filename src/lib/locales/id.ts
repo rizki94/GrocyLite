@@ -405,6 +405,13 @@ export default {
     reportFailed: 'Gagal melaporkan kunjungan',
     locationError: 'Lokasi tidak tersedia',
     locationErrorContent: 'Lokasi tidak tersedia. Pastikan GPS Anda diaktifkan.',
+    clickToSelectCustomer: 'Klik untuk memilih pelanggan',
+    refresh: 'Segarkan',
+    noCustomersFound: 'Pelanggan tidak ditemukan',
+    refreshOfflineData: 'Refresh data offline',
+    dataRefreshed: 'Data berhasil direfresh',
+    descriptionRequiredIfNoCustomer: 'Deskripsi kunjungan wajib diisi jika pelanggan tidak dipilih',
+    alreadyCheckedOutVisitNotice: 'Anda sudah melakukan check-out hari ini, tidak dapat menambahkan laporan kunjungan lagi.'
   },
   esCoklat: {
     title: 'Es Coklat',

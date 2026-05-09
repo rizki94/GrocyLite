@@ -257,6 +257,8 @@ export function AttendanceScreen({ navigation }: any) {
       if (response.data.status === 200) {
         Alert.alert(t('element.success'), t('attendance.checkInSuccess'));
         setAttendance(response.data.data);
+        // Cache the successful online check-in status
+        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(response.data.data));
       } else {
         Alert.alert(
           t('element.error'),
@@ -301,6 +303,8 @@ export function AttendanceScreen({ navigation }: any) {
       if (response.data.status === 200) {
         Alert.alert(t('element.success'), t('attendance.checkOutSuccess'));
         setAttendance(response.data.data);
+        // Cache the successful online check-out status
+        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(response.data.data));
       } else {
         Alert.alert(
           t('element.error'),
@@ -354,6 +358,34 @@ export function AttendanceScreen({ navigation }: any) {
               📡 {t('element.offline')} - {t('element.showingCachedData')}
             </Text>
           </View>
+        )}
+
+        {/* Refresh Data Button */}
+        {!isOffline && (
+          <TouchableOpacity
+            onPress={async () => {
+              setLoading(true);
+              try {
+                await getStatus();
+                // Pre-cache customers for VisitReport
+                const res = await apiClient.get('/api/contact/customer/active');
+                await AsyncStorage.setItem('cache:/api/contact/customer/active:undefined:undefined:undefined', JSON.stringify(res.data));
+                Alert.alert(t('element.success'), t('attendance.dataRefreshed') || 'All data refreshed for offline use');
+              } catch (e) {
+                console.log(e);
+                Alert.alert(t('element.error'), t('attendance.refreshFailed') || 'Failed to refresh data');
+              } finally {
+                setLoading(false);
+              }
+            }}
+            disabled={loading}
+            className="mb-4 p-4 bg-secondary/50 border border-border rounded-2xl flex-row items-center justify-center"
+          >
+            <RefreshCw size={18} color={colors.primary} style={{ marginRight: 8 }} />
+            <Text className="text-primary font-bold text-sm">
+              {t('attendance.refreshOfflineData') || 'Refresh All Offline Data'}
+            </Text>
+          </TouchableOpacity>
         )}
 
         {/* Sync Queue Banner */}
@@ -482,7 +514,14 @@ export function AttendanceScreen({ navigation }: any) {
 
             <View className="flex-row gap-4 mb-6">
               <TouchableOpacity
-                onPress={() => navigation.navigate('VisitReport')}
+                onPress={() => {
+                  if (attendance.check_out_time) {
+                    Alert.alert(t('element.error'), t('attendance.alreadyCheckedOutVisitNotice') || 'Cannot report visit after checkout');
+                    return;
+                  }
+                  navigation.navigate('VisitReport');
+                }}
+                style={{ opacity: attendance.check_out_time ? 0.5 : 1 }}
                 className="flex-1 bg-white dark:bg-card border border-border p-5 rounded-2xl items-center shadow-sm"
               >
                 <Navigation size={32} color={colors.primary} />
@@ -494,7 +533,7 @@ export function AttendanceScreen({ navigation }: any) {
                 </Text>
               </TouchableOpacity>
 
-              {/* {attendance.check_out_time ? (
+              {attendance.check_out_time ? (
                 <View className="flex-1 bg-secondary/20 border border-border p-5 rounded-2xl items-center">
                   <Clock size={32} color={colors.mutedForeground} />
                   <Text className="text-muted-foreground font-bold mt-3 text-center">
@@ -505,22 +544,21 @@ export function AttendanceScreen({ navigation }: any) {
                     {moment(attendance.check_out_time).format('h:mm a')}
                   </Text>
                 </View>
-              ) : ( */}
-
-              <TouchableOpacity
-                onPress={handleCheckOut}
-                disabled={loading}
-                className="flex border border-destructive/30 bg-destructive/5 p-5 rounded-2xl items-center"
-              >
-                <Clock size={32} color={colors.destructive} />
-                <Text className="text-destructive font-bold mt-3">
-                  {t('attendance.checkOut')}
-                </Text>
-                <Text className="text-destructive/60 text-[10px] mt-1 text-center">
-                  {t('attendance.endWorkDay')}
-                </Text>
-              </TouchableOpacity>
-              {/* )} */}
+              ) : (
+                <TouchableOpacity
+                  onPress={handleCheckOut}
+                  disabled={loading}
+                  className="flex-1 border border-destructive/30 bg-destructive/5 p-5 rounded-2xl items-center"
+                >
+                  <Clock size={32} color={colors.destructive} />
+                  <Text className="text-destructive font-bold mt-3">
+                    {t('attendance.checkOut')}
+                  </Text>
+                  <Text className="text-destructive/60 text-[10px] mt-1 text-center">
+                    {t('attendance.endWorkDay')}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <Text className="text-lg font-bold text-foreground mb-4 px-1">

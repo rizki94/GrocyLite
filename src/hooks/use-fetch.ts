@@ -42,7 +42,7 @@ export function useFetch<T = any>(
           }
         }
 
-        const response = await apiClient.get(url);
+        const response = await apiClient.get(url, { params });
         if (isMounted) {
           setData(response.data);
           setFetchError(null);

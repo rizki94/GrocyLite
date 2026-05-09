@@ -30,6 +30,9 @@ import { useTranslation } from 'react-i18next';
 
 import { useOffline } from '../../hooks/use-offline';
 
+import { CustomerSearchModal } from '../../components/attendance/customer-search-modal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export function VisitReportScreen({ navigation }: any) {
   const { t } = useTranslation();
   const colors = useThemeColor();
@@ -38,27 +41,36 @@ export function VisitReportScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [selectedContact, setSelectedContact] = useState<any>(null);
   const [notes, setNotes] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
   const [photo, setPhoto] = useState<any>(null);
   const [location, setLocation] = useState<any>(null);
-  const [showAll, setShowAll] = useState(false);
-  const PAGE_SIZE = 30;
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [attendance, setAttendance] = useState<any>(null);
 
-  const { data: contacts, isLoading: loadingContacts } = useFetch(
+  const { data: contacts, isLoading: loadingContacts, refetch: refetchContacts } = useFetch(
     '/api/contact/customer/active',
   );
 
-  const filteredContacts = React.useMemo(() => {
-    if (!Array.isArray(contacts)) return [];
-    if (searchQuery) {
-      // Show ALL matches when searching
-      return contacts.filter(c =>
-        c.name?.toLowerCase().includes(searchQuery.toLowerCase()),
-      );
-    }
-    // Default: first PAGE_SIZE, expandable
-    return showAll ? contacts : contacts.slice(0, PAGE_SIZE);
-  }, [contacts, searchQuery, showAll]);
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const cached = await AsyncStorage.getItem('@attendance_status');
+        if (cached) {
+          const status = JSON.parse(cached);
+          setAttendance(status);
+          if (status.check_out_time) {
+            Alert.alert(
+              t('element.error'),
+              t('attendance.alreadyCheckedOutVisitNotice') || 'Cannot report visit after checkout',
+              [{ text: t('general.ok'), onPress: () => navigation.goBack() }]
+            );
+          }
+        }
+      } catch (e) {
+        console.log(e);
+      }
+    };
+    checkStatus();
+  }, []);
 
   const takePhoto = async () => {
     const options: any = {
@@ -98,8 +110,8 @@ export function VisitReportScreen({ navigation }: any) {
     try {
       setLoading(true);
 
-      if (!selectedContact) {
-        Alert.alert(t('element.error'), t('attendance.selectCustomer'));
+      if (!selectedContact && (!notes || !notes.trim())) {
+        Alert.alert(t('element.error'), t('attendance.descriptionRequiredIfNoCustomer') || 'Visit description is required if no customer is selected');
         setLoading(false);
         return;
       }
@@ -112,7 +124,7 @@ export function VisitReportScreen({ navigation }: any) {
           latitude: String(coords.latitude),
           longitude: String(coords.longitude),
           notes: notes || undefined,
-          contact_id: String(selectedContact.id),
+          contact_id: selectedContact ? String(selectedContact.id) : undefined,
         };
 
         if (photo) {
@@ -132,8 +144,8 @@ export function VisitReportScreen({ navigation }: any) {
         return;
       }
 
-      if (!selectedContact) {
-        Alert.alert(t('element.error'), t('attendance.selectCustomer'));
+      if (!selectedContact && (!notes || !notes.trim())) {
+        Alert.alert(t('element.error'), t('attendance.descriptionRequiredIfNoCustomer') || 'Visit description is required if no customer is selected');
         setLoading(false);
         return;
       }
@@ -141,7 +153,9 @@ export function VisitReportScreen({ navigation }: any) {
       const formData = new FormData();
       formData.append('latitude', String(coords.latitude));
       formData.append('longitude', String(coords.longitude));
-      formData.append('contact_id', String(selectedContact.id));
+      if (selectedContact) {
+        formData.append('contact_id', String(selectedContact.id));
+      }
 
       if (notes) {
         formData.append('notes', notes);
@@ -227,77 +241,53 @@ export function VisitReportScreen({ navigation }: any) {
           </TouchableOpacity>
         )}
 
-        <Text className="text-sm font-bold text-muted-foreground uppercase mb-2 px-1">
-          {t('attendance.selectCustomer')}
-        </Text>
-
-        <Card className="mb-6 p-2">
-          <View className="relative mb-2">
-            <View className="absolute left-3 top-2.5 z-10">
-              <Search size={18} color={colors.mutedForeground} />
-            </View>
-            <Input
-              placeholder={t('attendance.searchCustomerPlaceholder')}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              className="h-10 pl-10 bg-background border border-border rounded-lg"
-            />
-          </View>
-
-          {selectedContact && (
-            <View className="bg-primary/10 p-3 rounded-lg mb-2 flex-row items-center justify-between">
-              <View className="flex-row items-center">
-                <User
-                  size={16}
-                  color={colors.primary}
-                  style={{ marginRight: 8 }}
-                />
-                <Text className="text-primary font-bold">
-                  {selectedContact.name}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setSelectedContact(null)}>
-                <Text className="text-destructive font-bold text-xs">
-                  {t('element.cancel')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {!selectedContact &&
-            filteredContacts.map((contact: any) => (
-              <TouchableOpacity
-                key={contact.id}
-                onPress={() => setSelectedContact(contact)}
-                className="p-3 border-b border-border active:bg-secondary/50 flex-row items-center"
-              >
-                <User
-                  size={16}
-                  color={colors.mutedForeground}
-                  style={{ marginRight: 10 }}
-                />
-                <Text className="text-foreground">{contact.name}</Text>
-              </TouchableOpacity>
-            ))}
-
-          {loadingContacts && (
-            <Text className="p-4 text-center text-xs text-muted-foreground">
-              {t('attendance.loadingCustomers')}
-            </Text>
-          )}
-
-          {/* Load more button when not searching and list is capped */}
-          {!searchQuery && !showAll && Array.isArray(contacts) && contacts.length > PAGE_SIZE && (
-            <TouchableOpacity
-              onPress={() => setShowAll(true)}
-              className="p-3 items-center border-t border-border"
-            >
-              <Text className="text-primary text-sm font-bold">
-                {t('general.showAll') || 'Show all'} ({contacts.length})
+        <View className="flex-row items-center justify-between mb-2 px-1">
+          <Text className="text-sm font-bold text-muted-foreground uppercase">
+            {t('attendance.selectCustomer')}
+          </Text>
+          {!isOffline && (
+            <TouchableOpacity onPress={() => refetchContacts()} className="flex-row items-center">
+              <RefreshCw size={12} color={colors.primary} style={{ marginRight: 4 }} />
+              <Text className="text-xs text-primary font-bold">
+                {t('element.refresh') || 'Refresh'}
               </Text>
             </TouchableOpacity>
           )}
-        </Card>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => setIsModalVisible(true)}
+          className="mb-6"
+        >
+          <Card className={`p-4 flex-row items-center justify-between ${selectedContact ? 'border-primary bg-primary/5' : 'border-dashed border-2'}`}>
+            <View className="flex-row items-center flex-1">
+              <User
+                size={20}
+                color={selectedContact ? colors.primary : colors.mutedForeground}
+                style={{ marginRight: 12 }}
+              />
+              <View className="flex-1">
+                <Text className={`font-bold ${selectedContact ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {selectedContact ? selectedContact.name : t('attendance.clickToSelectCustomer') || 'Click to select customer'}
+                </Text>
+                {selectedContact?.address && (
+                  <Text className="text-xs text-primary/60 line-clamp-1" numberOfLines={1}>
+                    {selectedContact.address}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <Search size={18} color={selectedContact ? colors.primary : colors.mutedForeground} />
+          </Card>
+        </TouchableOpacity>
+
+        <CustomerSearchModal
+          visible={isModalVisible}
+          onClose={() => setIsModalVisible(false)}
+          customers={Array.isArray(contacts) ? contacts : []}
+          onSelect={setSelectedContact}
+          selectedId={selectedContact?.id}
+        />
 
         <Text className="text-sm font-bold text-muted-foreground uppercase mb-2 px-1">
           {t('attendance.photoOptional')}

@@ -406,6 +406,13 @@ export default {
     reportFailed: 'Failed to report visit',
     locationError: 'Location not available',
     locationErrorContent: 'Location not available. Please enable GPS.',
+    clickToSelectCustomer: 'Click to select customer',
+    refresh: 'Refresh',
+    noCustomersFound: 'No customer found',
+    refreshOfflineData: 'Refresh offline data',
+    dataRefreshed: 'Data refreshed successfully',
+    descriptionRequiredIfNoCustomer: 'Visit description is required if no customer is selected',
+    alreadyCheckedOutVisitNotice: 'You have already checked out today, you cannot add more visit reports.'
   },
   esCoklat: {
     title: 'Es Coklat',
