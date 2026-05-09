@@ -10,7 +10,7 @@ import {
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
 import { useThemeColor } from '../../lib/colors';
-import { Search, User, X, Check } from 'lucide-react-native';
+import { Search, X, Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 interface CustomerSearchModalProps {
@@ -52,9 +52,6 @@ export function CustomerSearchModal({
         className={`p-4 border-b border-border flex-row items-center justify-between ${isSelected ? 'bg-primary/5' : 'active:bg-secondary/30'}`}
       >
         <View className="flex-row items-center flex-1">
-          <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${isSelected ? 'bg-primary' : 'bg-secondary'}`}>
-            <User size={20} color={isSelected ? 'white' : colors.mutedForeground} />
-          </View>
           <View className="flex-1">
             <Text className={`font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
               {item.name}

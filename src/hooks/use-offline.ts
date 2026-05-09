@@ -88,16 +88,16 @@ export function useOffline() {
                 }
 
                 if (action.method === 'POST') {
-                    console.log(`Syncing POST to: ${apiClient.defaults.baseURL}${action.url}`);
+                    console.log(`Syncing POST to: ${action.url}`);
                     await apiClient.post(action.url, requestData, config);
                 } else if (action.method === 'PUT') {
-                    console.log(`Syncing PUT to: ${apiClient.defaults.baseURL}${action.url}`);
+                    console.log(`Syncing PUT to: ${action.url}`);
                     await apiClient.put(action.url, requestData, config);
                 } else if (action.method === 'DELETE') {
-                    console.log(`Syncing DELETE to: ${apiClient.defaults.baseURL}${action.url}`);
+                    console.log(`Syncing DELETE to: ${action.url}`);
                     await apiClient.delete(action.url, config);
                 } else if (action.method === 'GET') {
-                    console.log(`Syncing GET to: ${apiClient.defaults.baseURL}${action.url}`);
+                    console.log(`Syncing GET to: ${action.url}`);
                     await apiClient.get(action.url, config);
                 }
 

@@ -183,10 +183,7 @@ export function SettingsScreen() {
           >
             <View className="flex-row items-center">
               <View className="w-10 h-10 rounded-xl bg-orange-500/10 dark:bg-orange-400/20 items-center justify-center mr-4">
-                <RefreshCw
-                  size={20}
-                  color="#f97316"
-                />
+                <RefreshCw size={20} color="#f97316" />
               </View>
               <Text className="text-foreground font-bold">
                 {t('settings.checkUpdates') || 'Check for Updates'}
@@ -209,7 +206,7 @@ export function SettingsScreen() {
               <View className="w-10 h-10 rounded-xl bg-destructive/10 items-center justify-center mr-4">
                 <LogOut size={20} color={colors.destructive} />
               </View>
-              <Text className="text-destructive font-black">
+              <Text className="text-foreground font-black">
                 {t('element.logout')}
               </Text>
             </View>

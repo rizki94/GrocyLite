@@ -53,7 +53,9 @@ export default function App() {
   useAutoUpdate();
 
   // Resolve the actual active theme for StatusBar and Navigation
-  const isDark = (colorScheme || systemScheme) === 'dark';
+  const isDark = 
+    (colorScheme as any) === 'dark' || 
+    (((colorScheme as any) === 'system' || !colorScheme) && systemScheme === 'dark');
 
   useEffect(() => {
     AsyncStorage.getItem('user-theme-preference').then(pref => {

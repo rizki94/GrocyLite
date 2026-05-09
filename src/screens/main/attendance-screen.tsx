@@ -408,10 +408,11 @@ export function AttendanceScreen({ navigation }: any) {
                 </Text>
               </View>
             </View>
-            <View className={isSyncing ? 'animate-spin' : ''}>
+            <View>
               <RefreshCw
                 size={18}
                 color={colors.primary}
+                className={isSyncing ? 'opacity-50' : ''}
               />
             </View>
           </TouchableOpacity>
@@ -522,7 +523,7 @@ export function AttendanceScreen({ navigation }: any) {
                   navigation.navigate('VisitReport');
                 }}
                 style={{ opacity: attendance.check_out_time ? 0.5 : 1 }}
-                className="flex-1 bg-white dark:bg-card border border-border p-5 rounded-2xl items-center shadow-sm"
+                className="flex-1 bg-card border border-border p-5 rounded-2xl items-center shadow-sm"
               >
                 <Navigation size={32} color={colors.primary} />
                 <Text className="text-foreground font-bold mt-3">

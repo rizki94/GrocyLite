@@ -100,9 +100,9 @@ export function HomeScreen() {
 
   const purchaseTotal = Array.isArray(dashboardPurchase)
     ? dashboardPurchase.reduce(
-      (prev: number, cur: any) => prev + Number(cur.Amount),
-      0,
-    )
+        (prev: number, cur: any) => prev + Number(cur.Amount),
+        0,
+      )
     : 0;
 
   return (
@@ -142,7 +142,8 @@ export function HomeScreen() {
         {isOffline && (
           <View className="mb-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl">
             <Text className="text-orange-600 font-bold text-sm text-center">
-              📡 {t('element.offline') || 'Offline Mode'} - {t('element.showingCachedData') || 'Showing cached data'}
+              📡 {t('element.offline') || 'Offline Mode'} -{' '}
+              {t('element.showingCachedData') || 'Showing cached data'}
             </Text>
           </View>
         )}
@@ -168,10 +169,7 @@ export function HomeScreen() {
               </View>
             </View>
             <View className={isSyncing ? 'animate-spin' : ''}>
-              <RefreshCw
-                size={18}
-                color={colors.primary}
-              />
+              <RefreshCw size={18} color={colors.primary} />
             </View>
           </TouchableOpacity>
         )}

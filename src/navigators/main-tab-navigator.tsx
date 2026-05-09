@@ -1,5 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useColorScheme as useRNColorScheme } from 'react-native';
 import { FinanceScreen } from '../screens/main/finance-screen';
 import { HomeScreen } from '../screens/main/home-screen';
 import { WarehouseScreen } from '../screens/main/warehouse-screen';
@@ -22,7 +23,10 @@ const Tab = createBottomTabNavigator();
 export function MainTabNavigator() {
   const { t } = useTranslation();
   const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const systemScheme = useRNColorScheme();
+  const isDark = 
+    (colorScheme as any) === 'dark' || 
+    (((colorScheme as any) === 'system' || !colorScheme) && systemScheme === 'dark');
   const { hasPermission } = usePermissions();
 
   const salesPermissions = [

@@ -44,7 +44,9 @@ export const colors = {
 export function useThemeColor() {
   const { colorScheme } = useColorScheme();
   const systemScheme = useRNColorScheme();
-  const isDark = (colorScheme || systemScheme) === 'dark';
+  const isDark = 
+    (colorScheme as any) === 'dark' || 
+    (((colorScheme as any) === 'system' || !colorScheme) && systemScheme === 'dark');
 
   return {
     background: isDark ? colors.dark.background : colors.light.background,
