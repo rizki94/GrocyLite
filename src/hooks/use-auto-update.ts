@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, NativeModules } from 'react-native';
+const { SilentInstaller } = NativeModules;
+
 import DeviceInfo from 'react-native-device-info';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import axios from 'axios';
@@ -23,56 +25,74 @@ interface GitHubRelease {
 export const useAutoUpdate = () => {
   const [isChecking, setIsChecking] = useState(false);
   const { dirs } = ReactNativeBlobUtil.fs;
-  const fileName = 'GrocyLite-latest.apk';
-  const apkFilePath = `${dirs.DownloadDir}/${fileName}`;
+  const getApkPath = (version: string) => `${dirs.DownloadDir}/GrocyLite-${version}.apk`;
 
-  // Cleanup old APK files on mount
-  useEffect(() => {
-    const cleanup = async () => {
-      try {
-        const exists = await ReactNativeBlobUtil.fs.exists(apkFilePath);
-        if (exists) {
-          console.log('Cleaning up old update file...');
-          await ReactNativeBlobUtil.fs.unlink(apkFilePath);
-        }
-      } catch (e) {
-        console.warn('Failed to cleanup old APK:', e);
-      }
-    };
-    cleanup();
-  }, []);
 
-  const initiateDownload = async (url: string) => {
+  const initiateDownload = async (url: string, version: string) => {
     try {
-      // Alert user the download is starting
-      Alert.alert(
-        'Downloading...',
-        'The update is downloading. The installation will start automatically once finished.',
-        [{ text: 'OK' }]
-      );
+      const apkFilePath = getApkPath(version);
+      
+      // Check if file already exists
+      const alreadyDownloaded = await ReactNativeBlobUtil.fs.exists(apkFilePath);
+      let path = apkFilePath;
 
-      // Use ReactNativeBlobUtil for direct download
-      const res = await ReactNativeBlobUtil.config({
-        path: apkFilePath,
-      }).fetch('GET', url);
+      if (alreadyDownloaded) {
+        console.log('APK already exists, skipping download:', apkFilePath);
+      } else {
+        console.log('Starting download from:', url);
+        // Use ReactNativeBlobUtil with Android Download Manager for progress visibility
+        const res = await ReactNativeBlobUtil.config({
+          path: apkFilePath,
+          addAndroidDownloads: {
+            useDownloadManager: true,
+            notification: true,
+            title: 'GrocyLite Update',
+            description: `Downloading version ${version}...`,
+            mime: 'application/vnd.android.package-archive',
+            mediaScannable: true,
+            path: apkFilePath,
+          }
+        }).fetch('GET', url);
+        path = res.path();
+        console.log('Update downloaded to:', path);
+      }
 
-      const path = res.path();
-      console.log('Update downloaded to:', path);
+      // Verify file exists before installing
+      const exists = await ReactNativeBlobUtil.fs.exists(path);
+      if (!exists) {
+        throw new Error('APK file not found at path: ' + path);
+      }
 
-      // Trigger Android's package installer
-      // Note: Truly "silent" install requires Root or Device Owner.
-      // For standard apps, this is the most direct way.
-      ReactNativeBlobUtil.android.actionViewIntent(
-        path,
-        'application/vnd.android.package-archive',
-        'com.grocylite.provider'
-      );
+      // Try silent install first (works on Android 12+ non-rooted)
+      if (SilentInstaller) {
+        try {
+          console.log('Attempting silent install via PackageInstaller...');
+          await SilentInstaller.installPackage(path);
+          console.log('Silent install session committed.');
+          return;
+        } catch (silentError) {
+          console.warn('Silent install failed, falling back to manual:', silentError);
+        }
+      }
+
+      // Trigger Android's package installer (manual fallback)
+      console.log('Falling back to manual installation intent');
+      if (SilentInstaller) {
+        await SilentInstaller.manualInstall(path);
+      } else {
+        // Ultimate fallback if native module is missing (should not happen after rebuild)
+        ReactNativeBlobUtil.android.actionViewIntent(
+          path,
+          'application/vnd.android.package-archive',
+          'com.grocylite.provider'
+        );
+      }
     } catch (error) {
       Alert.alert(
-        'Download Error',
-        'Could not download the update. Please check your internet connection.'
+        'Update Error',
+        'Could not complete the update process. Please try again later.'
       );
-      console.error('Update download failed:', error);
+      console.error('Update failed:', error);
     }
   };
 
@@ -87,7 +107,7 @@ export const useAutoUpdate = () => {
         },
         {
           text: 'Update now',
-          onPress: () => initiateDownload(downloadUrl),
+          onPress: () => initiateDownload(downloadUrl, version),
         },
       ],
       { cancelable: true }
