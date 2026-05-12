@@ -60,7 +60,6 @@ export function useAuth() {
     () => ({
       login: async (name: string, password: string) => {
         try {
-          dispatch({ type: 'SET_LOADING', payload: true });
           const response = await apiClient.post('api/login_native', {
             name,
             password,
@@ -88,14 +87,12 @@ export function useAuth() {
           } else {
             const message = response.data?.message || 'Login failed';
             showToast(message);
-            dispatch({ type: 'SET_LOADING', payload: false });
             throw new Error(message);
           }
         } catch (e: any) {
           if (!e.message?.includes('Login failed')) {
             showToast(e.message || 'An error occurred');
           }
-          dispatch({ type: 'SET_LOADING', payload: false });
           throw e; // Important for callers to handle
         }
       },

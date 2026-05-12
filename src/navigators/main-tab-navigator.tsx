@@ -1,6 +1,5 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useColorScheme as useRNColorScheme } from 'react-native';
 import { FinanceScreen } from '../screens/main/finance-screen';
 import { HomeScreen } from '../screens/main/home-screen';
 import { WarehouseScreen } from '../screens/main/warehouse-screen';
@@ -13,7 +12,7 @@ import {
   DollarSign,
   Wallet,
 } from 'lucide-react-native';
-import { useColorScheme } from 'nativewind';
+import { useAppTheme } from '../hooks/use-app-theme';
 import { usePermissions } from '../hooks/use-permissions';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,11 +21,7 @@ const Tab = createBottomTabNavigator();
 
 export function MainTabNavigator() {
   const { t } = useTranslation();
-  const { colorScheme } = useColorScheme();
-  const systemScheme = useRNColorScheme();
-  const isDark = 
-    (colorScheme as any) === 'dark' || 
-    (((colorScheme as any) === 'system' || !colorScheme) && systemScheme === 'dark');
+  const { isDark } = useAppTheme();
   const { hasPermission } = usePermissions();
 
   const salesPermissions = [

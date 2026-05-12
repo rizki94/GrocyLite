@@ -22,42 +22,55 @@ interface GitHubRelease {
 
 export const useAutoUpdate = () => {
   const [isChecking, setIsChecking] = useState(false);
+  const { dirs } = ReactNativeBlobUtil.fs;
+  const fileName = 'GrocyLite-latest.apk';
+  const apkFilePath = `${dirs.DownloadDir}/${fileName}`;
+
+  // Cleanup old APK files on mount
+  useEffect(() => {
+    const cleanup = async () => {
+      try {
+        const exists = await ReactNativeBlobUtil.fs.exists(apkFilePath);
+        if (exists) {
+          console.log('Cleaning up old update file...');
+          await ReactNativeBlobUtil.fs.unlink(apkFilePath);
+        }
+      } catch (e) {
+        console.warn('Failed to cleanup old APK:', e);
+      }
+    };
+    cleanup();
+  }, []);
 
   const initiateDownload = async (url: string) => {
-    const { dirs } = ReactNativeBlobUtil.fs;
-    const fileName = 'GrocyLite-latest.apk';
-    const apkFilePath = `${dirs.DownloadDir}/${fileName}`;
-
     try {
       // Alert user the download is starting
       Alert.alert(
         'Downloading...',
-        'The update is downloading in the background. Please check your notification bar for progress.',
+        'The update is downloading. The installation will start automatically once finished.',
         [{ text: 'OK' }]
       );
 
-      // Use Android Download Manager for visible progress and auto-registration
+      // Use ReactNativeBlobUtil for direct download
       const res = await ReactNativeBlobUtil.config({
-        addAndroidDownloads: {
-          useDownloadManager: true,
-          notification: true,
-          path: apkFilePath,
-          description: 'Downloading GrocyLite update...',
-          mime: 'application/vnd.android.package-archive',
-          mediaScannable: true,
-        },
+        path: apkFilePath,
       }).fetch('GET', url);
 
-      // Trigger Android's package installer with FileProvider authority
+      const path = res.path();
+      console.log('Update downloaded to:', path);
+
+      // Trigger Android's package installer
+      // Note: Truly "silent" install requires Root or Device Owner.
+      // For standard apps, this is the most direct way.
       ReactNativeBlobUtil.android.actionViewIntent(
-        res.path(),
+        path,
         'application/vnd.android.package-archive',
         'com.grocylite.provider'
       );
     } catch (error) {
       Alert.alert(
         'Download Error',
-        'Could not download the update. Please try again later or check your internet connection.'
+        'Could not download the update. Please check your internet connection.'
       );
       console.error('Update download failed:', error);
     }

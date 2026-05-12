@@ -15,7 +15,7 @@ import {
 } from 'lucide-react-native';
 
 import { useNavigation } from '@react-navigation/native';
-import { useColorScheme } from 'nativewind';
+import { useAppTheme } from '../../hooks/use-app-theme';
 import { useTranslation } from 'react-i18next';
 import { useThemeColor } from '../../lib/colors';
 import DeviceInfo from 'react-native-device-info';
@@ -27,7 +27,7 @@ export function SettingsScreen() {
   const navigation = useNavigation();
   const { logout } = useContext(AuthContext);
   const user = useContext(UserContext);
-  const { colorScheme, setColorScheme } = useColorScheme();
+  const { colorScheme, setColorScheme } = useAppTheme();
   const { i18n, t } = useTranslation();
   const colors = useThemeColor();
   const insets = useSafeAreaInsets();

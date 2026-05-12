@@ -6,8 +6,7 @@ import {
 } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useColorScheme } from 'nativewind';
-import { useColorScheme as useRNColorScheme } from 'react-native';
+import { useAppTheme } from '../../hooks/use-app-theme';
 import { cn } from '../../lib/utils';
 import { useThemeColor, colors as themeColors } from '../../lib/colors';
 
@@ -31,11 +30,7 @@ export function AppLayout({
   const navigation = useNavigation();
   const colors = useThemeColor();
   const insets = useSafeAreaInsets();
-  const { colorScheme } = useColorScheme();
-  const systemScheme = useRNColorScheme();
-  const isDark = 
-    (colorScheme as any) === 'dark' || 
-    (((colorScheme as any) === 'system' || !colorScheme) && systemScheme === 'dark');
+  const { isDark } = useAppTheme();
 
   return (
     <SafeAreaView

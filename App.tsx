@@ -1,7 +1,7 @@
 import './global.css';
 import './src/lib/i18n';
 import React, { useEffect } from 'react';
-import { StatusBar, useColorScheme as useRNColorScheme } from 'react-native';
+import { View, StatusBar, useColorScheme as useRNColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
@@ -9,7 +9,7 @@ import {
   DarkTheme,
   NavigationContainer,
 } from '@react-navigation/native';
-import { useColorScheme } from 'nativewind';
+import { useAppTheme } from './src/hooks/use-app-theme';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -48,113 +48,123 @@ const Stack = createNativeStackNavigator();
 export default function App() {
   const { auth, state } = useAuth();
   const connection = useConnection();
-  const { colorScheme, setColorScheme } = useColorScheme();
-  const systemScheme = useRNColorScheme();
+  const { colorScheme, setColorScheme, isDark, systemScheme } = useAppTheme();
+  const [isThemeReady, setIsThemeReady] = React.useState(false);
   useAutoUpdate();
 
-  // Resolve the actual active theme for StatusBar and Navigation
-  const isDark = 
-    (colorScheme as any) === 'dark' || 
-    (((colorScheme as any) === 'system' || !colorScheme) && systemScheme === 'dark');
-
+  // Handle initial theme load and system theme changes manually
   useEffect(() => {
-    AsyncStorage.getItem('user-theme-preference').then(pref => {
-      if (pref) {
-        setColorScheme(pref as any);
+    const initTheme = async () => {
+      const pref = await AsyncStorage.getItem('user-theme-preference');
+      const targetTheme = pref || 'system';
+      
+      if (targetTheme === 'system') {
+        // Resolve system theme manually and set an EXPLICIT scheme in NativeWind
+        // This is often more stable on Android than letting NativeWind handle 'system'
+        setColorScheme(systemScheme === 'dark' ? 'dark' : 'light');
       } else {
-        setColorScheme('system');
+        setColorScheme(targetTheme as any);
       }
-    });
-  }, [setColorScheme]);
+      setIsThemeReady(true);
+    };
+
+    initTheme();
+  }, [systemScheme]); // Re-run if system scheme changes to keep 'system' preference in sync
+
+  if (!isThemeReady) {
+    return <SplashScreen />;
+  }
 
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <ConnectionContext.Provider value={connection}>
-          <AuthContext.Provider value={auth}>
-            <UserContext.Provider value={state.user}>
-              <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
-                <Stack.Navigator screenOptions={{ headerShown: false }}>
-                  {state.loading ? (
-                    <Stack.Screen name="Splash" component={SplashScreen} />
-                  ) : state.user ? (
-                    <>
-                      <Stack.Screen name="Main" component={MainTabNavigator} />
-                      <Stack.Screen
-                        name="StockOpnameDetail"
-                        component={StockOpnameScreen}
-                      />
-                      <Stack.Screen
-                        name="AccountDetail"
-                        component={AccountScreen}
-                      />
-                      <Stack.Screen
-                        name="StockOpnameList"
-                        component={StockOpnameListScreen}
-                      />
-                      <Stack.Screen name="Profit" component={ProfitScreen} />
-                      <Stack.Screen
-                        name="SalesApprove"
-                        component={SalesApproveScreen}
-                      />
-                      <Stack.Screen
-                        name="ApproveDetail"
-                        component={ApproveDetailScreen}
-                      />
-                      <Stack.Screen
-                        name="CancelTransaction"
-                        component={CancelTransactionScreen}
-                      />
-                      <Stack.Screen
-                        name="SalesReport"
-                        component={SalesReportScreen}
-                      />
-                      <Stack.Screen name="Purchase" component={PurchaseScreen} />
-                      <Stack.Screen
-                        name="SalesReturn"
-                        component={SalesReturnScreen}
-                      />
-                      <Stack.Screen
-                        name="DebtPayments"
-                        component={DebtPaymentsScreen}
-                      />
-                      <Stack.Screen
-                        name="CreditPayments"
-                        component={CreditPaymentsScreen}
-                      />
-                      <Stack.Screen
-                        name="Attendance"
-                        component={AttendanceScreen}
-                      />
-                      <Stack.Screen
-                        name="VisitReport"
-                        component={VisitReportScreen}
-                      />
-                      <Stack.Screen
-                        name="AttendanceRoute"
-                        component={AttendanceRouteScreen}
-                      />
-                      <Stack.Screen name="Products" component={ProductsScreen} />
-                    </>
-                  ) : (
-                    <>
-                      <Stack.Screen name="Auth" component={LoginScreen} />
-                      <Stack.Screen
-                        name="ServerConfiguration"
-                        component={ServerConfigurationScreen}
-                      />
-                    </>
-                  )}
-                </Stack.Navigator>
-              </NavigationContainer>
-            </UserContext.Provider>
-          </AuthContext.Provider>
-        </ConnectionContext.Provider>
-        <StatusBar
-          barStyle={isDark ? 'light-content' : 'dark-content'}
-          backgroundColor="transparent"
-          translucent
-        />
+        <View className={isDark ? 'dark' : ''} style={{ flex: 1 }}>
+          <ConnectionContext.Provider value={connection}>
+            <AuthContext.Provider value={auth}>
+              <UserContext.Provider value={state.user}>
+                <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
+                  <Stack.Navigator screenOptions={{ headerShown: false }}>
+                    {state.loading ? (
+                      <Stack.Screen name="Splash" component={SplashScreen} />
+                    ) : state.user ? (
+                      <>
+                        <Stack.Screen name="Main" component={MainTabNavigator} />
+                        <Stack.Screen
+                          name="StockOpnameDetail"
+                          component={StockOpnameScreen}
+                        />
+                        <Stack.Screen
+                          name="AccountDetail"
+                          component={AccountScreen}
+                        />
+                        <Stack.Screen
+                          name="StockOpnameList"
+                          component={StockOpnameListScreen}
+                        />
+                        <Stack.Screen name="Profit" component={ProfitScreen} />
+                        <Stack.Screen
+                          name="SalesApprove"
+                          component={SalesApproveScreen}
+                        />
+                        <Stack.Screen
+                          name="ApproveDetail"
+                          component={ApproveDetailScreen}
+                        />
+                        <Stack.Screen
+                          name="CancelTransaction"
+                          component={CancelTransactionScreen}
+                        />
+                        <Stack.Screen
+                          name="SalesReport"
+                          component={SalesReportScreen}
+                        />
+                        <Stack.Screen name="Purchase" component={PurchaseScreen} />
+                        <Stack.Screen
+                          name="SalesReturn"
+                          component={SalesReturnScreen}
+                        />
+                        <Stack.Screen
+                          name="DebtPayments"
+                          component={DebtPaymentsScreen}
+                        />
+                        <Stack.Screen
+                          name="CreditPayments"
+                          component={CreditPaymentsScreen}
+                        />
+                        <Stack.Screen
+                          name="Attendance"
+                          component={AttendanceScreen}
+                        />
+                        <Stack.Screen
+                          name="VisitReport"
+                          component={VisitReportScreen}
+                        />
+                        <Stack.Screen
+                          name="AttendanceRoute"
+                          component={AttendanceRouteScreen}
+                        />
+                        <Stack.Screen name="Products" component={ProductsScreen} />
+                      </>
+                    ) : (
+                      <>
+                        <Stack.Screen name="Auth" component={LoginScreen} />
+                        <Stack.Screen
+                          name="ServerConfiguration"
+                          component={ServerConfigurationScreen}
+                        />
+                      </>
+                    )}
+                  </Stack.Navigator>
+                </NavigationContainer>
+              </UserContext.Provider>
+            </AuthContext.Provider>
+          </ConnectionContext.Provider>
+          <StatusBar
+            barStyle={isDark ? 'light-content' : 'dark-content'}
+            backgroundColor="transparent"
+            translucent
+          />
+        </View>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

@@ -10,7 +10,7 @@ import {
   CardTitle,
   CardDescription,
 } from '../../components/ui/card';
-import { LogIn, Settings } from 'lucide-react-native';
+import { LogIn, Settings, Eye, EyeOff } from 'lucide-react-native';
 import { AuthContext } from '../../contexts/app-context';
 import { useThemeColor } from '../../lib/colors';
 
@@ -23,6 +23,7 @@ export function LoginScreen({ navigation }: any) {
   const { login } = React.useContext(AuthContext);
   const [name, setName] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
 
@@ -69,8 +70,25 @@ export function LoginScreen({ navigation }: any) {
             label={t('login.password')}
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            secureTextEntry={!showPassword}
             autoCapitalize="none"
+            rightIcon={
+              <React.Fragment>
+                {showPassword ? (
+                  <Eye
+                    size={20}
+                    color={colors.mutedForeground}
+                    onPress={() => setShowPassword(false)}
+                  />
+                ) : (
+                  <EyeOff
+                    size={20}
+                    color={colors.mutedForeground}
+                    onPress={() => setShowPassword(true)}
+                  />
+                )}
+              </React.Fragment>
+            }
           />
           <Button
             className="mt-4"
