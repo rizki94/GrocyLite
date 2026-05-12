@@ -40,7 +40,8 @@ export function AttendanceScreen({ navigation }: any) {
   const { t } = useTranslation();
   const colors = useThemeColor();
   const { apiClient } = useConnection();
-  const { isOffline, addToQueue, queue, processQueue, isSyncing } = useOffline();
+  const { isOffline, addToQueue, queue, processQueue, isSyncing } =
+    useOffline();
   const [loading, setLoading] = useState(false);
   const [fetchingStatus, setFetchingStatus] = useState(true);
   const [attendance, setAttendance] = useState<any>(null);
@@ -60,9 +61,9 @@ export function AttendanceScreen({ navigation }: any) {
         ]);
         return (
           granted['android.permission.ACCESS_FINE_LOCATION'] ===
-          PermissionsAndroid.RESULTS.GRANTED &&
+            PermissionsAndroid.RESULTS.GRANTED &&
           granted['android.permission.CAMERA'] ===
-          PermissionsAndroid.RESULTS.GRANTED
+            PermissionsAndroid.RESULTS.GRANTED
         );
       } catch (err) {
         console.warn(err);
@@ -78,7 +79,8 @@ export function AttendanceScreen({ navigation }: any) {
 
       if (isOffline) {
         // Load from cache when offline
-        const cachedAttendance = await AsyncStorage.getItem(ATTENDANCE_CACHE_KEY);
+        const cachedAttendance =
+          await AsyncStorage.getItem(ATTENDANCE_CACHE_KEY);
         const cachedVisits = await AsyncStorage.getItem(VISITS_CACHE_KEY);
 
         if (cachedAttendance) {
@@ -96,7 +98,10 @@ export function AttendanceScreen({ navigation }: any) {
       if (response.data.status === 200) {
         setAttendance(response.data.data);
         // Cache the attendance status
-        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(response.data.data));
+        await AsyncStorage.setItem(
+          ATTENDANCE_CACHE_KEY,
+          JSON.stringify(response.data.data),
+        );
 
         // If checked in, fetch today's visits
         if (response.data.data) {
@@ -109,7 +114,10 @@ export function AttendanceScreen({ navigation }: any) {
           if (routeResponse.data.status === 200) {
             setVisits(routeResponse.data.data.visits || []);
             // Cache visits
-            await AsyncStorage.setItem(VISITS_CACHE_KEY, JSON.stringify(routeResponse.data.data.visits || []));
+            await AsyncStorage.setItem(
+              VISITS_CACHE_KEY,
+              JSON.stringify(routeResponse.data.data.visits || []),
+            );
           }
         }
       }
@@ -117,7 +125,8 @@ export function AttendanceScreen({ navigation }: any) {
       console.error('Failed to fetch attendance status', error);
       // Try to load from cache on error
       try {
-        const cachedAttendance = await AsyncStorage.getItem(ATTENDANCE_CACHE_KEY);
+        const cachedAttendance =
+          await AsyncStorage.getItem(ATTENDANCE_CACHE_KEY);
         const cachedVisits = await AsyncStorage.getItem(VISITS_CACHE_KEY);
 
         if (cachedAttendance) {
@@ -197,7 +206,7 @@ export function AttendanceScreen({ navigation }: any) {
           Alert.alert(
             t('attendance.locationError'),
             t('attendance.locationErrorContent') ||
-            'Could not get current location. Please try again.',
+              'Could not get current location. Please try again.',
           );
           setLoading(false);
           return;
@@ -224,10 +233,17 @@ export function AttendanceScreen({ navigation }: any) {
             uri: selfie.uri,
             type: selfie.type || 'image/jpeg',
             name: selfie.fileName || `selfie_${Date.now()}.jpg`,
-          }
+          },
         };
 
-        await addToQueue('/api/attendance/check-in', 'POST', offlineData, { 'Content-Type': 'multipart/form-data' }, 'Check In', true);
+        await addToQueue(
+          '/api/attendance/check-in',
+          'POST',
+          offlineData,
+          { 'Content-Type': 'multipart/form-data' },
+          'Check In',
+          true,
+        );
 
         Alert.alert(t('element.success'), t('element.savedOffline'));
         // Optimistic update
@@ -239,7 +255,10 @@ export function AttendanceScreen({ navigation }: any) {
         };
         setAttendance(newAttendance);
         // Cache the offline check-in state
-        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(newAttendance));
+        await AsyncStorage.setItem(
+          ATTENDANCE_CACHE_KEY,
+          JSON.stringify(newAttendance),
+        );
         setLoading(false);
         return;
       }
@@ -258,7 +277,10 @@ export function AttendanceScreen({ navigation }: any) {
         Alert.alert(t('element.success'), t('attendance.checkInSuccess'));
         setAttendance(response.data.data);
         // Cache the successful online check-in status
-        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(response.data.data));
+        await AsyncStorage.setItem(
+          ATTENDANCE_CACHE_KEY,
+          JSON.stringify(response.data.data),
+        );
       } else {
         Alert.alert(
           t('element.error'),
@@ -279,18 +301,27 @@ export function AttendanceScreen({ navigation }: any) {
       const coords: any = await getCurrentLocation();
 
       if (isOffline) {
-        await addToQueue('/api/attendance/check-out', 'POST', {
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        }, {}, 'Check Out');
+        await addToQueue(
+          '/api/attendance/check-out',
+          'POST',
+          {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          },
+          {},
+          'Check Out',
+        );
         Alert.alert(t('element.success'), t('element.savedOffline'));
         const updatedAttendance = {
           ...attendance,
-          check_out_time: new Date().toISOString()
+          check_out_time: new Date().toISOString(),
         };
         setAttendance(updatedAttendance);
         // Cache the offline check-out state
-        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(updatedAttendance));
+        await AsyncStorage.setItem(
+          ATTENDANCE_CACHE_KEY,
+          JSON.stringify(updatedAttendance),
+        );
         setLoading(false);
         return;
       }
@@ -304,7 +335,10 @@ export function AttendanceScreen({ navigation }: any) {
         Alert.alert(t('element.success'), t('attendance.checkOutSuccess'));
         setAttendance(response.data.data);
         // Cache the successful online check-out status
-        await AsyncStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify(response.data.data));
+        await AsyncStorage.setItem(
+          ATTENDANCE_CACHE_KEY,
+          JSON.stringify(response.data.data),
+        );
       } else {
         Alert.alert(
           t('element.error'),
@@ -358,34 +392,6 @@ export function AttendanceScreen({ navigation }: any) {
               📡 {t('element.offline')} - {t('element.showingCachedData')}
             </Text>
           </View>
-        )}
-
-        {/* Refresh Data Button */}
-        {!isOffline && (
-          <TouchableOpacity
-            onPress={async () => {
-              setLoading(true);
-              try {
-                await getStatus();
-                // Pre-cache customers for VisitReport
-                const res = await apiClient.get('/api/contact/customer/active');
-                await AsyncStorage.setItem('cache:/api/contact/customer/active:undefined:undefined:undefined', JSON.stringify(res.data));
-                Alert.alert(t('element.success'), t('attendance.dataRefreshed') || 'All data refreshed for offline use');
-              } catch (e) {
-                console.log(e);
-                Alert.alert(t('element.error'), t('attendance.refreshFailed') || 'Failed to refresh data');
-              } finally {
-                setLoading(false);
-              }
-            }}
-            disabled={loading}
-            className="mb-4 p-4 bg-secondary/50 border border-border rounded-2xl flex-row items-center justify-center"
-          >
-            <RefreshCw size={18} color={colors.primary} style={{ marginRight: 8 }} />
-            <Text className="text-primary font-bold text-sm">
-              {t('attendance.refreshOfflineData') || 'Refresh All Offline Data'}
-            </Text>
-          </TouchableOpacity>
         )}
 
         {/* Sync Queue Banner */}
@@ -517,7 +523,11 @@ export function AttendanceScreen({ navigation }: any) {
               <TouchableOpacity
                 onPress={() => {
                   if (attendance.check_out_time) {
-                    Alert.alert(t('element.error'), t('attendance.alreadyCheckedOutVisitNotice') || 'Cannot report visit after checkout');
+                    Alert.alert(
+                      t('element.error'),
+                      t('attendance.alreadyCheckedOutVisitNotice') ||
+                        'Cannot report visit after checkout',
+                    );
                     return;
                   }
                   navigation.navigate('VisitReport');
@@ -630,10 +640,9 @@ export function AttendanceScreen({ navigation }: any) {
               )}
             </Card>
           </View>
-        )
-        }
-      </ScrollView >
+        )}
+      </ScrollView>
       <Loading isLoading={loading} />
-    </AppLayout >
+    </AppLayout>
   );
 }
