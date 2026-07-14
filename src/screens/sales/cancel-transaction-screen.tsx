@@ -27,6 +27,8 @@ interface CancelTransactionItem {
   NoTr: string;
   CompanyName: string;
   NetAmount: number;
+  Source: string;
+  Descr: string;
   opened?: boolean;
 }
 
@@ -37,12 +39,9 @@ export function CancelTransactionScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const [date, setDate] = useState(new Date());
-  const [selectedGroupCode, setSelectedGroupCode] = useState('SJ');
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showGroupSelect, setShowGroupSelect] = useState(false);
-
-  const { data: groupCodes } = useFetch('api/bridge/group_code');
 
   const {
     data: transactionData,
@@ -53,10 +52,9 @@ export function CancelTransactionScreen() {
     {
       params: {
         date: dateFormatted(date),
-        groupcode: selectedGroupCode,
       },
     },
-    { date, selectedGroupCode },
+    { date },
     refreshing,
   );
 
@@ -65,10 +63,11 @@ export function CancelTransactionScreen() {
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
-  const handleOpen = async (invoice: string) => {
+  const handleOpen = async (invoice: string, source: string) => {
     try {
       const response = await apiClient.post('api/bridge/open_invoice', {
         invoice,
+        source,
       });
       if (response.data.status === 200) {
         ToastAndroid.show(
@@ -105,7 +104,13 @@ export function CancelTransactionScreen() {
     <View className="mb-3 mx-4 flex-row items-center justify-between p-4 rounded-2xl border border-border/60 bg-card shadow-sm">
       <View className="flex-1 mr-4">
         <Text className="font-extrabold text-sm text-foreground mb-1">
+          {item.Source}
+        </Text>
+        <Text className="font-extrabold text-sm text-foreground mb-1">
           {item.NoTr}
+        </Text>
+        <Text className="font-extrabold text-sm text-foreground mb-1">
+          {item.Descr}
         </Text>
         <Text className="text-xs font-medium text-muted-foreground uppercase mb-1">
           {item.CompanyName}
@@ -124,7 +129,7 @@ export function CancelTransactionScreen() {
         ) : (
           <Pressable
             className="bg-primary/10 px-4 py-2.5 rounded-xl active:bg-primary/20 border border-primary/20"
-            onPress={() => handleOpen(item.NoTr)}
+            onPress={() => handleOpen(item.NoTr, item.Source)}
           >
             <Text className="text-primary font-bold text-xs uppercase tracking-tight">
               {t('cancelTransaction.open')}
@@ -134,10 +139,6 @@ export function CancelTransactionScreen() {
       </View>
     </View>
   );
-
-  const selectedGroup = Array.isArray(groupCodes)
-    ? groupCodes.find((g: any) => g.GrpCode === selectedGroupCode)
-    : null;
 
   return (
     <View
@@ -171,18 +172,6 @@ export function CancelTransactionScreen() {
             <View className="flex-1">
               <DatePicker value={date} onChange={setDate} />
             </View>
-            <Pressable
-              className="flex-row items-center justify-between px-3 py-2.5 rounded-lg border border-border bg-background"
-              onPress={() => setShowGroupSelect(true)}
-            >
-              <Text
-                className="text-foreground text-xs font-bold uppercase tracking-tight"
-                numberOfLines={1}
-              >
-                {selectedGroup ? selectedGroup.Descr : selectedGroupCode}
-              </Text>
-              <ChevronDown size={14} color={colors.mutedForeground} />
-            </Pressable>
           </View>
 
           <View className="relative">
@@ -215,58 +204,6 @@ export function CancelTransactionScreen() {
           ) : null
         }
       />
-
-      {/* Group Code Select Modal */}
-      <Modal
-        visible={showGroupSelect}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowGroupSelect(false)}
-      >
-        <Pressable
-          className="flex-1 bg-black/50 justify-center px-6"
-          onPress={() => setShowGroupSelect(false)}
-        >
-          <Pressable
-            className="bg-card rounded-3xl max-h-[60%] overflow-hidden border border-border/30"
-            onPress={e => e.stopPropagation()}
-          >
-            <View className="p-6 border-b border-border/10 bg-secondary/5">
-              <Text className="text-lg font-black text-foreground uppercase tracking-tight">
-                {t('cancelTransaction.selectGroup')}
-              </Text>
-            </View>
-            <ScrollView>
-              {Array.isArray(groupCodes) &&
-                groupCodes.map((code: any) => (
-                  <Pressable
-                    key={code.GrpCode}
-                    className={`p-5 border-b border-border/5 flex-row items-center justify-between ${
-                      selectedGroupCode === code.GrpCode ? 'bg-primary/5' : ''
-                    }`}
-                    onPress={() => {
-                      setSelectedGroupCode(code.GrpCode);
-                      setShowGroupSelect(false);
-                    }}
-                  >
-                    <Text
-                      className={`text-sm font-bold uppercase tracking-tight ${
-                        selectedGroupCode === code.GrpCode
-                          ? 'text-primary'
-                          : 'text-foreground'
-                      }`}
-                    >
-                      {code.Descr}
-                    </Text>
-                    {selectedGroupCode === code.GrpCode && (
-                      <View className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    )}
-                  </Pressable>
-                ))}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
       <Loading isLoading={isLoading} />
     </View>
   );
