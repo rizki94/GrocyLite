@@ -15,6 +15,7 @@ import {
   Wallet,
   CreditCard,
   ArrowRight,
+  ShoppingCart,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeColor } from '../../lib/colors';
@@ -76,6 +77,15 @@ export function SalesScreen() {
       bgColor: 'bg-amber-500/10 dark:bg-amber-400/20',
       route: 'SalesReturn',
       permission: 'sales-return-list',
+    },
+    {
+      title: 'Sales Order',
+      description: 'Create offline sales order',
+      icon: ShoppingCart,
+      color: colors.primary,
+      bgColor: 'bg-primary/10 dark:bg-primary/20',
+      route: 'SalesOrder',
+      permission: null,
     },
   ].filter(item => !item.permission || hasPermission(item.permission));
 

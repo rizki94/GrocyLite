@@ -6,6 +6,7 @@ const DEFAULT_URL = 'http://[IP_ADDRESS]';
 
 export const apiClient = axios.create({
   withCredentials: true,
+  timeout: 12000,
 });
 
 apiClient.interceptors.request.use(

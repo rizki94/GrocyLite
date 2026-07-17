@@ -42,6 +42,7 @@ import { AttendanceScreen } from './src/screens/main/attendance-screen';
 import { VisitReportScreen } from './src/screens/main/visit-report-screen';
 import { AttendanceRouteScreen } from './src/screens/main/attendance-route-screen';
 import { ProductsScreen } from './src/screens/main/products-screen';
+import { SalesOrderScreen } from './src/screens/sales/sales-order-screen';
 
 const Stack = createNativeStackNavigator();
 
@@ -122,6 +123,10 @@ export default function App() {
                         <Stack.Screen
                           name="SalesReturn"
                           component={SalesReturnScreen}
+                        />
+                        <Stack.Screen
+                          name="SalesOrder"
+                          component={SalesOrderScreen}
                         />
                         <Stack.Screen
                           name="DebtPayments"
