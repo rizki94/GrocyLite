@@ -29,6 +29,7 @@ export function MainTabNavigator() {
     'loss-profit-report',
     'sales-return-list',
     'sales-omzet-report',
+    'sales-order',
   ];
 
   const financePermissions = [

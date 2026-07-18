@@ -85,7 +85,7 @@ export function SalesScreen() {
       color: colors.primary,
       bgColor: 'bg-primary/10 dark:bg-primary/20',
       route: 'SalesOrder',
-      permission: null,
+      permission: 'sales-order',
     },
   ].filter(item => !item.permission || hasPermission(item.permission));
 
