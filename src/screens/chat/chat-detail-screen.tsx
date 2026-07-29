@@ -12,6 +12,7 @@ import {
   Alert,
   StyleSheet,
   StatusBar,
+  Modal,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -46,19 +47,22 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
   const { currentUser } = useChatUser();
   const insets = useSafeAreaInsets();
 
+  // Messages stored in NEWEST-FIRST order (index 0 = newest message at visual bottom)
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [inputContent, setInputContent] = useState('');
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<any>(null);
+  const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
 
   const fetchMessagesList = async (silent = false) => {
     try {
       const data = await getMessages(conversationId);
-      setMessages(data);
+      // getMessages returns oldest-first. Reverse so index 0 = newest message for inverted FlatList
+      setMessages(data.slice().reverse());
     } catch (e) {
       // silent fail
     } finally {
@@ -80,7 +84,7 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
     const textToSend = inputContent.trim();
     const imageToSend = selectedImage;
 
-    // ── Synchronous: clear input + image, add bubble NOW ──────────────────────
+    // Clear input & preview immediately
     setInputContent('');
     setSelectedImage(null);
 
@@ -98,10 +102,15 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
       isDeleted: false,
       isSending: true,
     };
-    // Append to the END of messages (inverted FlatList reverses → appears at visual bottom)
-    setMessages(prev => [...prev, optimisticMsg]);
+
+    // Prepend optimistic message to index 0 (which is the bottom of inverted list)
+    setMessages(prev => [optimisticMsg, ...prev]);
     setSending(true);
-    // ──────────────────────────────────────────────────────────────────────────
+
+    // Force scroll to visual bottom (offset 0 in inverted list) even if user was scrolled up in history
+    setTimeout(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }, 50);
 
     try {
       let mediaData: any = null;
@@ -131,13 +140,13 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
         ...mediaData,
       });
 
-      // Replace optimistic message with server-confirmed list
+      // Refetch and update state in newest-first order
       const confirmed = await getMessages(conversationId);
-      setMessages(confirmed);
+      setMessages(confirmed.slice().reverse());
     } catch (e) {
-      // Mark the optimistic bubble as failed
+      // Mark optimistic message as error
       setMessages(prev =>
-        prev.map(m => m.id === tempId ? { ...m, isSending: false, status: 'error' as const } : m)
+        prev.map(m => (m.id === tempId ? { ...m, isSending: false, status: 'error' as const } : m))
       );
       Alert.alert('Error', 'Failed to send message. Please try again.');
     } finally {
@@ -180,24 +189,24 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
     const isMe = String(item.senderId) === String(currentUser?.id);
     const isSystem = item.type === 'text' && !item.senderId;
 
-    const reversed = [...messages].reverse();
-    const nextItem = reversed[index + 1]; // Earlier message in chronological order
+    // In newest-first order, index + 1 is the message created BEFORE this item
+    const earlierItem = messages[index + 1];
 
-    // Date Divider: show if it's the first message of a new day
+    // Date Divider: show if this item starts a new day compared to the earlier message
     const currentDateLabel = formatDateDivider(item.createdAt);
-    const previousDateLabel = nextItem ? formatDateDivider(nextItem.createdAt) : null;
-    const showDateDivider = !nextItem || currentDateLabel !== previousDateLabel;
+    const earlierDateLabel = earlierItem ? formatDateDivider(earlierItem.createdAt) : null;
+    const showDateDivider = !earlierItem || currentDateLabel !== earlierDateLabel;
 
-    // Sender Grouping: hide sender name/avatar if previous message was from same sender on same day
-    const isSameSenderAsPrev =
-      nextItem &&
-      String(nextItem.senderId) === String(item.senderId) &&
-      currentDateLabel === previousDateLabel &&
+    // Sender Grouping: hide sender avatar/name if earlier message was from same sender on same day
+    const isSameSenderAsEarlier =
+      earlierItem &&
+      String(earlierItem.senderId) === String(item.senderId) &&
+      currentDateLabel === earlierDateLabel &&
       !isSystem &&
-      nextItem.type !== 'text';
+      earlierItem.type !== 'text';
 
-    const showAvatar = !isMe && !isSystem && !isSameSenderAsPrev;
-    const showSenderName = !isMe && !isSystem && !isSameSenderAsPrev && !!item.senderDisplayName;
+    const showAvatar = !isMe && !isSystem && !isSameSenderAsEarlier;
+    const showSenderName = !isMe && !isSystem && !isSameSenderAsEarlier && !!item.senderDisplayName;
 
     if (isSystem) {
       return (
@@ -289,11 +298,15 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
 
             {/* Image attachment */}
             {item.mediaUrl && item.type === 'image' && (
-              <Image
-                source={{ uri: item.mediaUrl }}
-                style={styles.messageImage}
-                resizeMode="cover"
-              />
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => setViewingImageUrl(item.mediaUrl || null)}>
+                <Image
+                  source={{ uri: item.mediaUrl }}
+                  style={styles.messageImage}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
             )}
 
             {/* Event notification card */}
@@ -348,14 +361,23 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
               )
             )}
 
-            {/* Timestamp */}
-            <Text
-              style={[
-                styles.messageTime,
-                { color: isMe ? 'rgba(255,255,255,0.65)' : '#a1a1aa' },
-              ]}>
-              {moment(item.createdAt).format('HH:mm')}
-            </Text>
+            {/* Timestamp & sending indicator */}
+            <View style={styles.timeRow}>
+              <Text
+                style={[
+                  styles.messageTime,
+                  { color: isMe ? 'rgba(255,255,255,0.65)' : '#a1a1aa' },
+                ]}>
+                {moment(item.createdAt).format('HH:mm')}
+              </Text>
+              {item.isSending && (
+                <ActivityIndicator
+                  size="small"
+                  color={isMe ? '#ffffff' : '#059669'}
+                  style={{ marginLeft: 4, transform: [{ scale: 0.6 }] }}
+                />
+              )}
+            </View>
           </View>
         </View>
       </View>
@@ -406,7 +428,7 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
       <KeyboardAvoidingView
         style={[styles.keyboardView, { backgroundColor: bg }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}>
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
         {/* Messages */}
         {loading ? (
           <View style={styles.center}>
@@ -415,7 +437,7 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
         ) : (
           <FlatList
             ref={flatListRef}
-            data={[...messages].reverse()}
+            data={messages}
             inverted
             keyExtractor={item => item.id}
             renderItem={renderMessageItem}
@@ -492,6 +514,30 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Full-Screen Picture Viewer Modal */}
+      <Modal
+        visible={!!viewingImageUrl}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setViewingImageUrl(null)}>
+        <View style={styles.mediaViewerContainer}>
+          <StatusBar backgroundColor="#000000" barStyle="light-content" />
+          <TouchableOpacity
+            style={[styles.mediaViewerCloseBtn, { top: insets.top > 0 ? insets.top + 10 : 20 }]}
+            onPress={() => setViewingImageUrl(null)}
+            activeOpacity={0.7}>
+            <X size={24} color="#ffffff" />
+          </TouchableOpacity>
+          {viewingImageUrl && (
+            <Image
+              source={{ uri: viewingImageUrl }}
+              style={styles.mediaViewerImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -615,9 +661,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 3,
+  },
   messageTime: {
     fontSize: 10,
-    marginTop: 3,
     textAlign: 'right',
   },
   imagePreview: {
@@ -659,5 +710,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 0,
+  },
+  mediaViewerContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaViewerCloseBtn: {
+    position: 'absolute',
+    right: 20,
+    zIndex: 99,
+    padding: 10,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  mediaViewerImage: {
+    width: '100%',
+    height: '100%',
   },
 });

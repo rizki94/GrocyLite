@@ -163,6 +163,7 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
             const { bg: avatarBg, text: avatarText } = getAvatarColors(item);
             const isGlobal = item.name === 'Global Chat';
             const isDivision = item.name?.startsWith('Divisi ');
+            const isGroup = item.type === 'group';
             const other = item.participants?.find(p => String(p.id) !== String(currentUser?.id));
             const rawAvatar = item.type === 'group' ? item.avatar : other?.avatar;
 
