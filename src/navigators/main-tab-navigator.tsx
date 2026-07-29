@@ -1,21 +1,26 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { View, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { FinanceScreen } from '../screens/main/finance-screen';
 import { HomeScreen } from '../screens/main/home-screen';
 import { WarehouseScreen } from '../screens/main/warehouse-screen';
 import { SettingsScreen } from '../screens/main/settings-screen';
 import { SalesScreen } from '../screens/main/sales-screen';
+import { ChatListScreen } from '../screens/chat/chat-list-screen';
 import {
   Home,
   Warehouse as WarehouseIcon,
   Settings,
   DollarSign,
   Wallet,
+  MessageSquare,
 } from 'lucide-react-native';
 import { useAppTheme } from '../hooks/use-app-theme';
 import { usePermissions } from '../hooks/use-permissions';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { getConversations } from '../services/chat-api';
 
 const Tab = createBottomTabNavigator();
 
@@ -23,6 +28,23 @@ export function MainTabNavigator() {
   const { t } = useTranslation();
   const { isDark } = useAppTheme();
   const { hasPermission } = usePermissions();
+  const [totalUnread, setTotalUnread] = useState(0);
+
+  // Poll total unread count across all conversations
+  useFocusEffect(
+    React.useCallback(() => {
+      const fetchUnread = async () => {
+        try {
+          const convs = await getConversations();
+          const total = convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+          setTotalUnread(total);
+        } catch (_) {}
+      };
+      fetchUnread();
+      const interval = setInterval(fetchUnread, 8000);
+      return () => clearInterval(interval);
+    }, []),
+  );
 
   const salesPermissions = [
     'approve-invoice',
@@ -108,6 +130,45 @@ export function MainTabNavigator() {
           }}
         />
       )}
+
+      <Tab.Screen
+        name="Chat"
+        component={ChatListScreen}
+        options={{
+          tabBarLabel: 'Chat',
+          tabBarIcon: ({ color, size }) => {
+            return (
+              <View style={{ position: 'relative' }}>
+                <MessageSquare size={size} color={color} />
+                {totalUnread > 0 && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: -4,
+                      right: -6,
+                      minWidth: 16,
+                      height: 16,
+                      borderRadius: 8,
+                      backgroundColor: '#ef4444',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      paddingHorizontal: 3,
+                    }}>
+                    <Text
+                      style={{
+                        color: '#fff',
+                        fontSize: 9,
+                        fontWeight: '700',
+                      }}>
+                      {totalUnread > 99 ? '99+' : totalUnread}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          },
+        }}
+      />
 
       <Tab.Screen
         name="Settings"

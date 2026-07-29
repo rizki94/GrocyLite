@@ -43,6 +43,9 @@ import { VisitReportScreen } from './src/screens/main/visit-report-screen';
 import { AttendanceRouteScreen } from './src/screens/main/attendance-route-screen';
 import { ProductsScreen } from './src/screens/main/products-screen';
 import { SalesOrderScreen } from './src/screens/sales/sales-order-screen';
+import { ChatDetailScreen } from './src/screens/chat/chat-detail-screen';
+import { useFcm } from './src/hooks/use-fcm';
+import { navigationRef } from './src/lib/navigation';
 
 const Stack = createNativeStackNavigator();
 
@@ -52,6 +55,9 @@ export default function App() {
   const { colorScheme, setColorScheme, isDark, systemScheme } = useAppTheme();
   const [isThemeReady, setIsThemeReady] = React.useState(false);
   useAutoUpdate();
+
+  // Register FCM token and notification permission after login
+  useFcm(!!state.user);
 
   // Handle initial theme load and system theme changes manually
   useEffect(() => {
@@ -83,7 +89,7 @@ export default function App() {
           <ConnectionContext.Provider value={connection}>
             <AuthContext.Provider value={auth}>
               <UserContext.Provider value={state.user}>
-                <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
+                <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme} ref={navigationRef}>
                   <Stack.Navigator screenOptions={{ headerShown: false }}>
                     {state.loading ? (
                       <Stack.Screen name="Splash" component={SplashScreen} />
@@ -149,6 +155,10 @@ export default function App() {
                           component={AttendanceRouteScreen}
                         />
                         <Stack.Screen name="Products" component={ProductsScreen} />
+                        <Stack.Screen
+                          name="ChatDetailScreen"
+                          component={ChatDetailScreen}
+                        />
                       </>
                     ) : (
                       <>

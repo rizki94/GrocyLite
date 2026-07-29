@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "839851166412",
+    "project_id": "grocy-74536",
+    "storage_bucket": "grocy-74536.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:839851166412:android:52ca8476450e84ce10d069",
+        "android_client_info": {
+          "package_name": "com.grocylite"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBX9hQYRCqvjdjhXUQt9wXsnfNrt95mni0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

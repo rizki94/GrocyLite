@@ -43,5 +43,9 @@ import './global.css';
 import { AppRegistry } from 'react-native';
 import App from './App';
 import { name as appName } from './app.json';
+import { setupBackgroundFcmHandler } from './src/hooks/use-fcm';
+
+// Must be called at module level, before component tree mounts
+setupBackgroundFcmHandler();
 
 AppRegistry.registerComponent(appName, () => App);
