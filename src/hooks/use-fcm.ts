@@ -52,11 +52,15 @@ async function registerToken() {
   try {
     const messaging = getMessaging();
     const token = await getToken(messaging);
+    console.log('[FCM] Got token:', token ? token.substring(0, 20) + '...' : 'null');
     if (token) {
       await registerFcmToken(token);
+      console.log('[FCM] Token registered with backend successfully');
+    } else {
+      console.warn('[FCM] No token returned — check google-services.json / APNs key');
     }
-  } catch (_) {
-    // Silently fail — user may have denied permission
+  } catch (e: any) {
+    console.error('[FCM] registerToken failed:', e?.message || e);
   }
 }
 
@@ -103,7 +107,10 @@ export function useFcm(isAuthenticated: boolean) {
       });
 
       // Foreground messages
-      unsubscribeForeground = onMessage(messaging, async _msg => {});
+      unsubscribeForeground = onMessage(messaging, async msg => {
+        console.log('[FCM] Foreground message received:', JSON.stringify(msg?.notification), 'data:', JSON.stringify(msg?.data));
+      });
+
 
       // App in BACKGROUND and user tapped notification
       onNotificationOpenedApp(messaging, remoteMessage => {
