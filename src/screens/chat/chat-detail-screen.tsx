@@ -13,6 +13,8 @@ import {
   StyleSheet,
   StatusBar,
   Modal,
+  ScrollView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -22,7 +24,13 @@ import {
   Receipt,
   Package,
   X,
+  Bot,
+  Play,
+  FileText,
+  Download,
+  Volume2,
 } from 'lucide-react-native';
+import { WebView } from 'react-native-webview';
 import { launchImageLibrary } from 'react-native-image-picker';
 import moment from 'moment';
 import {
@@ -55,6 +63,7 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
   const [uploading, setUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<any>(null);
   const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
+  const [viewingVideoUrl, setViewingVideoUrl] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -186,8 +195,21 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
   };
 
   const renderMessageItem = ({ item, index }: { item: Message; index: number }) => {
-    const isMe = String(item.senderId) === String(currentUser?.id);
-    const isSystem = item.type === 'text' && !item.senderId;
+    const isSystemUser =
+      String(item.senderId) === 'system' ||
+      item.senderUsername === 'system' ||
+      (!item.senderId && item.type === 'text');
+
+    const isMe = !isSystemUser && String(item.senderId) === String(currentUser?.id);
+    const hasTable = isMarkdownTable(item.content || '');
+
+    // Short system status log (< 60 chars, single line, no table, no event) -> render as small centered status pill badge
+    const isShortSystemPill =
+      isSystemUser &&
+      item.type !== 'event_share' &&
+      !hasTable &&
+      (item.content || '').length < 60 &&
+      !(item.content || '').includes('\n');
 
     // In newest-first order, index + 1 is the message created BEFORE this item
     const earlierItem = messages[index + 1];
@@ -202,13 +224,13 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
       earlierItem &&
       String(earlierItem.senderId) === String(item.senderId) &&
       currentDateLabel === earlierDateLabel &&
-      !isSystem &&
+      !isShortSystemPill &&
       earlierItem.type !== 'text';
 
-    const showAvatar = !isMe && !isSystem && !isSameSenderAsEarlier;
-    const showSenderName = !isMe && !isSystem && !isSameSenderAsEarlier && !!item.senderDisplayName;
+    const showAvatar = !isMe && !isShortSystemPill && !isSameSenderAsEarlier;
+    const showSenderName = !isMe && !isShortSystemPill && !isSameSenderAsEarlier;
 
-    if (isSystem) {
+    if (isShortSystemPill) {
       return (
         <View key={item.id}>
           {showDateDivider && (
@@ -239,6 +261,10 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
       );
     }
 
+    const senderDisplayName = isSystemUser ? 'Notifikasi Sistem' : (item.senderDisplayName || item.senderUsername || 'User');
+    const bubbleMaxWidth = (hasTable || item.type === 'event_share') ? '92%' : '80%';
+    const isVideo = item.type === 'video' || item.mediaType?.startsWith('video') || (item.mediaUrl && item.mediaUrl.match(/\.(mp4|webm|mov|mkv)(\?|$)/i));
+
     return (
       <View key={item.id}>
         {showDateDivider && (
@@ -260,7 +286,11 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
           {!isMe && (
             <View style={{ width: 30, marginRight: 6 }}>
               {showAvatar ? (
-                item.senderAvatar ? (
+                isSystemUser ? (
+                  <View style={[styles.avatarSmall, { backgroundColor: '#10b981' }]}>
+                    <Bot size={16} color="#ffffff" />
+                  </View>
+                ) : item.senderAvatar ? (
                   <Image
                     source={{ uri: item.senderAvatar }}
                     style={styles.avatarSmallImage}
@@ -268,9 +298,7 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
                 ) : (
                   <View style={[styles.avatarSmall, { backgroundColor: '#059669' }]}>
                     <Text style={styles.avatarSmallText}>
-                      {String(item.senderDisplayName || item.senderUsername || '?')
-                        .charAt(0)
-                        .toUpperCase()}
+                      {String(senderDisplayName).charAt(0).toUpperCase()}
                     </Text>
                   </View>
                 )
@@ -283,6 +311,7 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
               styles.bubble,
               isMe ? styles.myBubble : styles.theirBubble,
               {
+                maxWidth: bubbleMaxWidth,
                 backgroundColor: isMe ? myBubbleBg : theirBubbleBg,
                 shadowColor: '#000',
                 shadowOpacity: 0.06,
@@ -291,9 +320,11 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
                 elevation: 1,
               },
             ]}>
-            {/* Sender name for group chats */}
+            {/* Sender name */}
             {showSenderName && (
-              <Text style={styles.senderName}>{item.senderDisplayName}</Text>
+              <Text style={[styles.senderName, isSystemUser && { color: '#059669' }]}>
+                {senderDisplayName}
+              </Text>
             )}
 
             {/* Image attachment */}
@@ -307,6 +338,67 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
                   resizeMode="cover"
                 />
               </TouchableOpacity>
+            )}
+
+            {/* Video attachment */}
+            {item.mediaUrl && isVideo && (
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={() => setViewingVideoUrl(item.mediaUrl || null)}
+                style={styles.videoCard}>
+                <View style={styles.videoOverlay}>
+                  <View style={styles.playBtnCircle}>
+                    <Play size={22} color="#ffffff" style={{ marginLeft: 2 }} />
+                  </View>
+                  <Text style={styles.videoTitle} numberOfLines={1}>
+                    {item.mediaName || 'Putar Video'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Document attachment */}
+            {item.mediaUrl && item.type === 'document' && (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => {
+                  if (item.mediaUrl) {
+                    Linking.openURL(item.mediaUrl).catch(() => {
+                      Alert.alert('File', item.mediaName || 'Lampiran Dokumen');
+                    });
+                  }
+                }}
+                style={[
+                  styles.documentCard,
+                  { backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }
+                ]}>
+                <FileText size={24} color={isMe ? '#ffffff' : '#059669'} />
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={[styles.docName, { color: isMe ? '#ffffff' : textPrimary }]} numberOfLines={1}>
+                    {item.mediaName || 'Dokumen'}
+                  </Text>
+                  <Text style={[styles.docSize, { color: isMe ? 'rgba(255,255,255,0.7)' : '#71717a' }]}>
+                    {item.mediaSize ? `${(item.mediaSize / 1024 / 1024).toFixed(2)} MB` : 'File'}
+                  </Text>
+                </View>
+                <Download size={16} color={isMe ? '#ffffff' : '#059669'} />
+              </TouchableOpacity>
+            )}
+
+            {/* Audio attachment */}
+            {item.mediaUrl && item.type === 'audio' && (
+              <View
+                style={[
+                  styles.documentCard,
+                  { backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }
+                ]}>
+                <Volume2 size={24} color={isMe ? '#ffffff' : '#059669'} />
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={[styles.docName, { color: isMe ? '#ffffff' : textPrimary }]} numberOfLines={1}>
+                    {item.mediaName || 'Pesan Suara'}
+                  </Text>
+                </View>
+              </View>
             )}
 
             {/* Event notification card */}
@@ -451,11 +543,10 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
             keyExtractor={item => item.id}
             renderItem={renderMessageItem}
             contentContainerStyle={styles.messageList}
-            showsVerticalScrollIndicator={false}
           />
         )}
 
-        {/* Image preview */}
+        {/* Selected Image Preview */}
         {selectedImage && (
           <View
             style={[
@@ -466,36 +557,37 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
               source={{ uri: selectedImage.uri }}
               style={styles.imagePreviewThumb}
             />
-            <Text style={{ color: '#a1a1aa', fontSize: 12, flex: 1, marginLeft: 8 }}>
-              Photo selected
-            </Text>
-            <TouchableOpacity onPress={() => setSelectedImage(null)}>
+            <TouchableOpacity
+              onPress={() => setSelectedImage(null)}
+              style={{ marginLeft: 'auto', padding: 6 }}>
               <X size={18} color="#ef4444" />
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Input Bar */}
+        {/* Input bar */}
         <View
           style={[
             styles.inputBar,
             {
               backgroundColor: inputBg,
               borderTopColor: inputBorder,
-              paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
+              paddingBottom: Math.max(insets.bottom, 10),
             },
           ]}>
-          <TouchableOpacity onPress={handlePickImage} style={styles.attachBtn}>
-            <ImageIcon size={22} color="#a1a1aa" />
+          <TouchableOpacity
+            onPress={handlePickImage}
+            style={styles.attachBtn}
+            disabled={uploading}>
+            <ImageIcon size={22} color={isDark ? '#a1a1aa' : '#71717a'} />
           </TouchableOpacity>
 
           <TextInput
-            placeholder="Message..."
-            placeholderTextColor={isDark ? '#71717a' : '#a1a1aa'}
             value={inputContent}
             onChangeText={setInputContent}
+            placeholder="Type a message..."
+            placeholderTextColor={isDark ? '#71717a' : '#a1a1aa'}
             multiline
-            maxLength={2000}
             style={[
               styles.textInput,
               {
@@ -524,7 +616,7 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Full-Screen Picture Viewer Modal */}
+      {/* Full-Screen Picture Viewer Modal with Pinch-to-Zoom */}
       <Modal
         visible={!!viewingImageUrl}
         transparent={true}
@@ -539,10 +631,59 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
             <X size={24} color="#ffffff" />
           </TouchableOpacity>
           {viewingImageUrl && (
-            <Image
-              source={{ uri: viewingImageUrl }}
-              style={styles.mediaViewerImage}
-              resizeMode="contain"
+            <ScrollView
+              contentContainerStyle={styles.zoomScrollContainer}
+              maximumZoomScale={4}
+              minimumZoomScale={1}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              centerContent={true}>
+              <Image
+                source={{ uri: viewingImageUrl }}
+                style={styles.mediaViewerImage}
+                resizeMode="contain"
+              />
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
+
+      {/* Full-Screen Video Player Modal */}
+      <Modal
+        visible={!!viewingVideoUrl}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setViewingVideoUrl(null)}>
+        <View style={styles.mediaViewerContainer}>
+          <StatusBar backgroundColor="#000000" barStyle="light-content" />
+          <TouchableOpacity
+            style={[styles.mediaViewerCloseBtn, { top: insets.top > 0 ? insets.top + 10 : 20, zIndex: 99 }]}
+            onPress={() => setViewingVideoUrl(null)}
+            activeOpacity={0.7}>
+            <X size={24} color="#ffffff" />
+          </TouchableOpacity>
+          {viewingVideoUrl && (
+            <WebView
+              style={{ flex: 1, backgroundColor: '#000000' }}
+              source={{
+                html: `
+                  <!DOCTYPE html>
+                  <html>
+                  <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+                    <style>
+                      body { margin:0; padding:0; background:#000; display:flex; justify-content:center; align-items:center; height:100vh; }
+                      video { width:100%; height:100%; object-fit:contain; }
+                    </style>
+                  </head>
+                  <body>
+                    <video src="${viewingVideoUrl}" controls autoplay playsinline></video>
+                  </body>
+                  </html>
+                `
+              }}
+              allowsInlineMediaPlayback={true}
+              mediaPlaybackRequiresUserAction={false}
             />
           )}
         </View>
@@ -652,10 +793,55 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   messageImage: {
-    width: 200,
+    width: 210,
     height: 150,
     borderRadius: 10,
     marginBottom: 4,
+  },
+  videoCard: {
+    width: 210,
+    height: 125,
+    borderRadius: 10,
+    backgroundColor: '#18181b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+    overflow: 'hidden',
+  },
+  videoOverlay: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
+  playBtnCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(5, 150, 105, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  videoTitle: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  documentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 4,
+    minWidth: 180,
+  },
+  docName: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  docSize: {
+    fontSize: 10,
   },
   eventCard: {
     padding: 8,
@@ -724,15 +910,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
     justifyContent: 'center',
-    alignItems: 'center',
   },
   mediaViewerCloseBtn: {
     position: 'absolute',
     right: 20,
-    zIndex: 99,
+    zIndex: 999,
     padding: 10,
     borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  zoomScrollContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   mediaViewerImage: {
     width: '100%',

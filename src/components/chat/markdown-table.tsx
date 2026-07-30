@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 
 interface MarkdownTableProps {
   content: string;
@@ -7,120 +7,187 @@ interface MarkdownTableProps {
   isDark?: boolean;
 }
 
+export function normalizeLines(text: string): string[] {
+  if (!text) return [];
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim()
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
+}
+
 export function isMarkdownTable(text: string): boolean {
   if (!text) return false;
-  const lines = text.trim().split('\n');
-  return (
-    lines.length >= 2 &&
-    lines.some(line => line.includes('|'))
-  );
+  const lines = normalizeLines(text);
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (lines[i].startsWith('|') && lines[i + 1].replace(/[\s|\-:]/g, '').length === 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function MarkdownTable({ content, isMe = false, isDark = false }: MarkdownTableProps) {
-  const lines = content.trim().split('\n').filter(l => l.trim().length > 0);
-  
-  const rawRows: string[][] = [];
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  lines.forEach(line => {
-    // Ignore separator line like | --- | --- | or |---|---|
-    if (/^\s*\|?\s*[:\-\s|]+\s*\|?\s*$/.test(line)) return;
+  const { titleLines, headerRow, bodyRows, columnCount, colWidths } = React.useMemo(() => {
+    const lines = normalizeLines(content);
+    const titleLines = lines.filter(l => !l.startsWith('|'));
+    const tableLines = lines.filter(l => l.startsWith('|'));
 
-    let trimmed = line.trim();
-    if (trimmed.startsWith('|')) trimmed = trimmed.substring(1);
-    if (trimmed.endsWith('|')) trimmed = trimmed.substring(0, trimmed.length - 1);
-
-    const cells = trimmed.split('|').map(c => c.trim());
-    if (cells.length > 0) {
-      rawRows.push(cells);
+    if (tableLines.length < 2) {
+      return { titleLines: [], headerRow: [], bodyRows: [], columnCount: 0, colWidths: [] };
     }
-  });
 
-  if (rawRows.length === 0) {
-    return <Text style={{ color: isMe ? '#fff' : isDark ? '#fff' : '#000' }}>{content}</Text>;
+    const parseRow = (line: string) =>
+      line.split('|').slice(1, -1).map(c => c.trim());
+
+    const headerRow = parseRow(tableLines[0]);
+    const isSeparator = (l: string) => /^\|[\s\-:|]+\|$/.test(l.replace(/\s+/g, ' '));
+    const bodyRows = tableLines.slice(1).filter(l => !isSeparator(l)).map(parseRow);
+    const columnCount = headerRow.length;
+
+    // Calculate width for each column based on sample rows (max 50) for performance
+    const colWidths: number[] = new Array(columnCount).fill(85);
+    const sampleRows = [headerRow, ...bodyRows.slice(0, 50)];
+    sampleRows.forEach(row => {
+      row.forEach((cell, idx) => {
+        if (idx < columnCount) {
+          const estimatedWidth = Math.min(240, Math.max(85, cell.length * 8.5 + 24));
+          if (estimatedWidth > colWidths[idx]) {
+            colWidths[idx] = estimatedWidth;
+          }
+        }
+      });
+    });
+
+    return { titleLines, headerRow, bodyRows, columnCount, colWidths };
+  }, [content]);
+
+  if (columnCount === 0 || bodyRows.length === 0) {
+    return <Text style={{ color: isMe ? '#ffffff' : isDark ? '#ffffff' : '#09090b' }}>{content}</Text>;
   }
 
-  const headerRow = rawRows[0];
-  const bodyRows = rawRows.slice(1);
-  const columnCount = headerRow.length;
+  const MAX_EXPAND_ROWS = 25; // Capped to prevent Android Native UI OOM/crash
+  const hasMore = bodyRows.length > 5;
+  const visibleRows = isExpanded
+    ? bodyRows.slice(0, MAX_EXPAND_ROWS)
+    : bodyRows.slice(0, 5);
 
-  // Calculate width for each column based on content length
-  const colWidths: number[] = new Array(columnCount).fill(90);
+  const totalHidden = bodyRows.length - visibleRows.length;
 
-  rawRows.forEach(row => {
-    row.forEach((cell, idx) => {
-      if (idx < columnCount) {
-        const estimatedWidth = Math.min(220, Math.max(90, cell.length * 8.5 + 24));
-        if (estimatedWidth > colWidths[idx]) {
-          colWidths[idx] = estimatedWidth;
-        }
-      }
-    });
-  });
-
-  const borderColor = isMe ? 'rgba(255,255,255,0.25)' : isDark ? '#3f3f46' : '#cbd5e1';
-  const headerBg = isMe ? 'rgba(0,0,0,0.18)' : isDark ? '#27272a' : '#f1f5f9';
+  const borderColor = isMe ? 'rgba(255,255,255,0.3)' : isDark ? '#3f3f46' : '#cbd5e1';
+  const headerBg = isMe ? 'rgba(0,0,0,0.2)' : isDark ? '#27272a' : '#f1f5f9';
   const textHeaderColor = isMe ? '#ffffff' : isDark ? '#34d399' : '#059669';
   const textCellColor = isMe ? '#ffffff' : isDark ? '#f4f4f5' : '#0f172a';
+  const titleColor = isMe ? '#ffffff' : isDark ? '#f4f4f5' : '#09090b';
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.scroll}>
-      <View style={[styles.tableContainer, { borderColor }]}>
-        {/* Table Header */}
-        <View style={[styles.row, styles.headerRow, { backgroundColor: headerBg, borderBottomColor: borderColor }]}>
-          {headerRow.map((colText, idx) => (
-            <View
-              key={idx}
-              style={[
-                styles.cell,
-                { width: colWidths[idx] || 90 },
-                idx < columnCount - 1 && { borderRightWidth: 1, borderRightColor: borderColor },
-              ]}>
-              <Text style={[styles.headerText, { color: textHeaderColor }]} numberOfLines={2}>
-                {colText}
-              </Text>
-            </View>
-          ))}
-        </View>
+    <View style={styles.container}>
+      {/* Title lines above table */}
+      {titleLines.length > 0 && (
+        <Text style={[styles.titleText, { color: titleColor }]}>
+          {titleLines.join('\n')}
+        </Text>
+      )}
 
-        {/* Table Body Rows */}
-        {bodyRows.map((row, rIdx) => (
-          <View
-            key={rIdx}
-            style={[
-              styles.row,
-              rIdx < bodyRows.length - 1 && { borderBottomWidth: 1, borderBottomColor: borderColor },
-            ]}>
-            {Array.from({ length: columnCount }).map((_, cIdx) => {
-              const cellText = row[cIdx] || '';
-              return (
+      {/* Scrollable Table */}
+      <View style={[styles.tableContainer, { borderColor }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.scroll}>
+          <View>
+            {/* Table Header */}
+            <View style={[styles.row, styles.headerRow, { backgroundColor: headerBg, borderBottomColor: borderColor }]}>
+              {headerRow.map((colText, idx) => (
                 <View
-                  key={cIdx}
+                  key={idx}
                   style={[
                     styles.cell,
-                    { width: colWidths[cIdx] || 90 },
-                    cIdx < columnCount - 1 && { borderRightWidth: 1, borderRightColor: borderColor },
+                    { width: colWidths[idx] || 85 },
+                    idx < columnCount - 1 && { borderRightWidth: 1, borderRightColor: borderColor },
                   ]}>
-                  <Text style={[styles.cellText, { color: textCellColor }]}>
-                    {cellText}
+                  <Text style={[styles.headerText, { color: textHeaderColor }]} numberOfLines={2}>
+                    {colText}
                   </Text>
                 </View>
-              );
-            })}
+              ))}
+            </View>
+
+            {/* Table Body Rows */}
+            {visibleRows.map((row, rIdx) => (
+              <View
+                key={rIdx}
+                style={[
+                  styles.row,
+                  { backgroundColor: rIdx % 2 === 0 ? 'transparent' : (isMe ? 'rgba(0,0,0,0.06)' : isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)') },
+                  rIdx < visibleRows.length - 1 && { borderBottomWidth: 1, borderBottomColor: borderColor },
+                ]}>
+                {Array.from({ length: columnCount }).map((_, cIdx) => {
+                  const cellText = row[cIdx] || '';
+                  return (
+                    <View
+                      key={cIdx}
+                      style={[
+                        styles.cell,
+                        { width: colWidths[cIdx] || 85 },
+                        cIdx < columnCount - 1 && { borderRightWidth: 1, borderRightColor: borderColor },
+                      ]}>
+                      <Text style={[styles.cellText, { color: textCellColor }]}>
+                        {cellText}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
           </View>
-        ))}
+        </ScrollView>
       </View>
-    </ScrollView>
+
+      {/* Read More / Collapse Toggle */}
+      {hasMore && (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => setIsExpanded(prev => !prev)}
+          style={[
+            styles.toggleBtn,
+            {
+              borderColor: borderColor,
+              backgroundColor: isMe ? 'rgba(0,0,0,0.15)' : isDark ? '#27272a' : '#f8fafc',
+            },
+          ]}>
+          <Text style={[styles.toggleBtnText, { color: isMe ? '#ffffff' : '#059669' }]}>
+            {isExpanded
+              ? totalHidden > 0
+                ? `Sembunyikan (Menampilkan 25 dari ${bodyRows.length} item) ▲`
+                : 'Sembunyikan ▲'
+              : `Lihat semua (+${bodyRows.length - 5} item) ▼`}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: {
+  container: {
     marginVertical: 4,
+    width: '100%',
+  },
+  titleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+    lineHeight: 17,
   },
   tableContainer: {
     borderWidth: 1,
     borderRadius: 8,
     overflow: 'hidden',
+  },
+  scroll: {
+    flexGrow: 0,
   },
   row: {
     flexDirection: 'row',
@@ -135,11 +202,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   cellText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '400',
+  },
+  toggleBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    marginTop: -1,
+  },
+  toggleBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
