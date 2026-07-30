@@ -333,8 +333,17 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
                       styles.eventType,
                       { color: isMe ? 'rgba(255,255,255,0.8)' : '#059669' },
                     ]}>
-                    {item.eventType}
+                    {item.eventType === 'goods_receipt' || item.eventType === 'goods_receipt_synced'
+                      ? 'Penerimaan Barang'
+                      : item.eventType === 'transaction'
+                      ? 'Transaksi'
+                      : item.eventType}
                   </Text>
+                  {item.eventType === 'goods_receipt_synced' && (
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: isMe ? '#86efac' : '#059669', marginLeft: 'auto' }}>
+                      ✓ Sudah Sync
+                    </Text>
+                  )}
                 </View>
                 <Text
                   style={[
