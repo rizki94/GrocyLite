@@ -8,6 +8,8 @@ export interface ChatUser {
   username?: string;
   avatar_img?: string;
   token?: string;
+  is_cs?: boolean;
+  [key: string]: any;
 }
 
 export function useChatUser() {

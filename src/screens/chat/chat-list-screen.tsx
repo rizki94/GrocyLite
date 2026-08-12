@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,8 +17,10 @@ import {
   MessageSquarePlus,
   Users,
   Globe,
+  Headphones,
 } from 'lucide-react-native';
 import moment from 'moment';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getConversations, Conversation } from '../../services/chat-api';
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { useChatUser } from '../../hooks/use-chat-user';
@@ -36,6 +38,32 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
+  const [csFilterActive, setCsFilterActive] = useState(true);
+
+  // Load CS Mode state from AsyncStorage
+  useEffect(() => {
+    async function loadCsState() {
+      try {
+        const saved = await AsyncStorage.getItem('@chat_cs_mode_active');
+        if (saved !== null) {
+          setCsFilterActive(JSON.parse(saved));
+        }
+      } catch (e) {
+        // silent fail
+      }
+    }
+    loadCsState();
+  }, []);
+
+  const toggleCsFilter = async () => {
+    const nextState = !csFilterActive;
+    setCsFilterActive(nextState);
+    try {
+      await AsyncStorage.setItem('@chat_cs_mode_active', JSON.stringify(nextState));
+    } catch (e) {
+      // silent fail
+    }
+  };
 
   const fetchConversationsList = async () => {
     try {
@@ -64,9 +92,29 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
 
   const getConversationTitle = (conv: Conversation): string => {
     if (conv.type === 'group') return conv.name || 'Group Chat';
-    const other = conv.participants.find(
-      p => String(p.id) !== String(currentUser?.id),
+
+    // 1. Customer User (WhatsApp Customer)
+    const waCustomer = conv.participants?.find(p => p.username?.startsWith('wa_'));
+    if (waCustomer) {
+      return waCustomer.displayName || waCustomer.username || 'Customer';
+    }
+
+    // 2. System User (AI Analytic / AI Business Analyst)
+    const aiParticipant = conv.participants?.find(
+      p => p.username === 'ai_analyst' || p.username === 'ai_analytic',
     );
+    if (aiParticipant) return 'AI Business Analyst';
+
+    // 3. Regular Staff User
+    const other = conv.participants?.find(
+      p =>
+        p.username !== 'ai_analyst' &&
+        p.username !== 'ai_analytic' &&
+        String(p.id) !== String(currentUser?.id),
+    ) || conv.participants?.find(
+      p => p.username !== 'ai_analyst' && p.username !== 'ai_analytic',
+    ) || conv.participants?.[0];
+
     return other
       ? String(other.displayName || other.username || 'Unknown')
       : 'Chat';
@@ -92,7 +140,17 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
     return { bg: '#059669', text: '#fff' };
   };
 
+  const hasCsPermission = !!currentUser?.is_cs;
+
+  // Filter conversations:
+  // Mode CS: ONLY WhatsApp customer chats
+  // Mode Internal: ONLY Internal chats (Staff, Groups, AI Analyst)
   const filteredConversations = conversations.filter(c => {
+    const isWaCustomer = c.participants?.some(p => p.username?.startsWith('wa_'));
+    if (hasCsPermission) {
+      if (csFilterActive && !isWaCustomer) return false;
+      if (!csFilterActive && isWaCustomer) return false;
+    }
     const title = getConversationTitle(c);
     return title.toLowerCase().includes(search.toLowerCase());
   });
@@ -117,6 +175,48 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
           <MessageSquarePlus size={20} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {/* CS Mode Toggle Banner (shown if user is CS staff) */}
+      {hasCsPermission && (
+        <View
+          style={[
+            styles.csBanner,
+            {
+              backgroundColor: csFilterActive
+                ? isDark
+                  ? 'rgba(16, 185, 129, 0.15)'
+                  : '#dcfce7'
+                : isDark
+                ? '#18181b'
+                : '#f4f4f5',
+              borderBottomColor: dividerColor,
+            },
+          ]}>
+          <View style={styles.csBannerLeft}>
+            <Headphones
+              size={16}
+              color={csFilterActive ? '#10b981' : textSecondary}
+            />
+            <Text
+              style={[
+                styles.csBannerText,
+                { color: csFilterActive ? '#059669' : textSecondary },
+              ]}>
+              {csFilterActive ? 'Mode CS (Chat WA)' : 'Chat Internal'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={toggleCsFilter}
+            style={[
+              styles.csToggleBtn,
+              { backgroundColor: csFilterActive ? '#059669' : '#71717a' },
+            ]}>
+            <Text style={styles.csToggleBtnText}>
+              {csFilterActive ? 'Nonaktifkan' : 'Aktifkan CS'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Search Bar */}
       <View style={[styles.searchWrap, { backgroundColor: searchBg }]}>
@@ -164,6 +264,7 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
             const isGlobal = item.name === 'Global Chat';
             const isDivision = item.name?.startsWith('Divisi ');
             const isGroup = item.type === 'group';
+            const isPrivate = item.type === 'private';
             const other = item.participants?.find(p => String(p.id) !== String(currentUser?.id));
             const rawAvatar = item.type === 'group' ? item.avatar : other?.avatar;
 
@@ -174,6 +275,8 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
                     conversationId: item.id,
                     title,
                     avatar: rawAvatar,
+                    isGroup,
+                    isPrivate,
                   })
                 }
                 activeOpacity={0.7}
@@ -301,6 +404,33 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.3,
+  },
+  csBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  csBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  csBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  csToggleBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  csToggleBtnText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   newChatBtn: {
     width: 38,

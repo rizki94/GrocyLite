@@ -50,7 +50,7 @@ interface ChatDetailScreenProps {
 }
 
 export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
-  const { conversationId, title, avatar } = route.params || {};
+  const { conversationId, title, avatar, isGroup, isPrivate } = route.params || {};
   const { isDark } = useAppTheme();
   const { currentUser } = useChatUser();
   const insets = useSafeAreaInsets();
@@ -200,7 +200,12 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
       item.senderUsername === 'system' ||
       (!item.senderId && item.type === 'text');
 
-    const isMe = !isSystemUser && String(item.senderId) === String(currentUser?.id);
+    const isAiAnalytic =
+      item.senderUsername === 'ai_analyst' || item.senderUsername === 'ai_analytic';
+
+    const isMe =
+      !isSystemUser && !isAiAnalytic && String(item.senderId) === String(currentUser?.id);
+
     const hasTable = isMarkdownTable(item.content || '');
 
     // Short system status log (< 60 chars, single line, no table, no event) -> render as small centered status pill badge
@@ -228,7 +233,7 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
       earlierItem.type !== 'text';
 
     const showAvatar = !isMe && !isShortSystemPill && !isSameSenderAsEarlier;
-    const showSenderName = !isMe && !isShortSystemPill && !isSameSenderAsEarlier;
+    const showSenderName = !isMe && !isShortSystemPill && !isSameSenderAsEarlier && (isGroup || !isPrivate);
 
     if (isShortSystemPill) {
       return (
@@ -261,7 +266,12 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
       );
     }
 
-    const senderDisplayName = isSystemUser ? 'Notifikasi Sistem' : (item.senderDisplayName || item.senderUsername || 'User');
+    const senderDisplayName = isSystemUser
+      ? 'Notifikasi Sistem'
+      : isAiAnalytic
+      ? 'AI Analytic'
+      : (item.senderDisplayName || item.senderUsername || 'User');
+
     const bubbleMaxWidth = (hasTable || item.type === 'event_share') ? '92%' : '80%';
     const isVideo = item.type === 'video' || item.mediaType?.startsWith('video') || (item.mediaUrl && item.mediaUrl.match(/\.(mp4|webm|mov|mkv)(\?|$)/i));
 
@@ -286,8 +296,8 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
           {!isMe && (
             <View style={{ width: 30, marginRight: 6 }}>
               {showAvatar ? (
-                isSystemUser ? (
-                  <View style={[styles.avatarSmall, { backgroundColor: '#10b981' }]}>
+                isSystemUser || isAiAnalytic ? (
+                  <View style={[styles.avatarSmall, { backgroundColor: isAiAnalytic ? '#3b82f6' : '#10b981' }]}>
                     <Bot size={16} color="#ffffff" />
                   </View>
                 ) : item.senderAvatar ? (
@@ -322,7 +332,7 @@ export function ChatDetailScreen({ route, navigation }: ChatDetailScreenProps) {
             ]}>
             {/* Sender name */}
             {showSenderName && (
-              <Text style={[styles.senderName, isSystemUser && { color: '#059669' }]}>
+              <Text style={[styles.senderName, (isSystemUser || isAiAnalytic) && { color: isAiAnalytic ? '#3b82f6' : '#059669' }]}>
                 {senderDisplayName}
               </Text>
             )}
