@@ -26,6 +26,8 @@ import { useAppTheme } from '../../hooks/use-app-theme';
 import { useChatUser } from '../../hooks/use-chat-user';
 import { NewChatModal } from '../../components/chat/new-chat-modal';
 
+const CS_MODE_KEY = '@chat_cs_mode_active';
+
 interface ChatListScreenProps {
   navigation: any;
 }
@@ -39,12 +41,20 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
   const [search, setSearch] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [csFilterActive, setCsFilterActive] = useState(true);
+  const [apiBaseUrl, setApiBaseUrl] = useState('');
+
+  // Load API base URL
+  useEffect(() => {
+    AsyncStorage.getItem('@url').then(url => {
+      if (url) setApiBaseUrl(url);
+    });
+  }, []);
 
   // Load CS Mode state from AsyncStorage
   useEffect(() => {
     async function loadCsState() {
       try {
-        const saved = await AsyncStorage.getItem('@chat_cs_mode_active');
+        const saved = await AsyncStorage.getItem(CS_MODE_KEY);
         if (saved !== null) {
           setCsFilterActive(JSON.parse(saved));
         }
@@ -59,7 +69,7 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
     const nextState = !csFilterActive;
     setCsFilterActive(nextState);
     try {
-      await AsyncStorage.setItem('@chat_cs_mode_active', JSON.stringify(nextState));
+      await AsyncStorage.setItem(CS_MODE_KEY, JSON.stringify(nextState));
     } catch (e) {
       // silent fail
     }
@@ -106,26 +116,46 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
     if (aiParticipant) return 'AI Business Analyst';
 
     // 3. Regular Staff User
-    const other = conv.participants?.find(
-      p =>
-        p.username !== 'ai_analyst' &&
-        p.username !== 'ai_analytic' &&
-        String(p.id) !== String(currentUser?.id),
-    ) || conv.participants?.find(
-      p => p.username !== 'ai_analyst' && p.username !== 'ai_analytic',
-    ) || conv.participants?.[0];
+    const other =
+      conv.participants?.find(
+        p =>
+          p.username !== 'ai_analyst' &&
+          p.username !== 'ai_analytic' &&
+          String(p.id) !== String(currentUser?.id),
+      ) ||
+      conv.participants?.find(
+        p => p.username !== 'ai_analyst' && p.username !== 'ai_analytic',
+      ) ||
+      conv.participants?.[0];
 
     return other
       ? String(other.displayName || other.username || 'Unknown')
       : 'Chat';
   };
 
+  // Adapted from web ConversationList.tsx — includes "You: " prefix and media labels
   const getConversationSubtitle = (conv: Conversation): string => {
-    if (!conv.lastMessage) return 'No messages yet';
-    if (conv.lastMessage.isDeleted) return 'Message was deleted';
-    if (conv.lastMessage.type === 'event_share') return '📌 Event Notification';
-    if (conv.lastMessage.mediaUrl) return '📎 Attachment';
-    return conv.lastMessage.content || '';
+    const msg = conv.lastMessage;
+    if (!msg) return 'No messages yet';
+    if (msg.isDeleted) return 'This message was deleted';
+
+    const isMe = String(msg.senderId) === String(currentUser?.id);
+    const prefix = isMe ? 'You: ' : '';
+
+    switch (msg.type) {
+      case 'image':
+        return `${prefix}📷 Photo`;
+      case 'video':
+        return `${prefix}🎥 Video`;
+      case 'audio':
+        return `${prefix}🎵 Audio`;
+      case 'document':
+        return `${prefix}📄 File`;
+      case 'event_share':
+        return `${prefix}📌 Event Notification`;
+      default:
+        return `${prefix}${msg.content || ''}`;
+    }
   };
 
   const getAvatarInitial = (title: string) =>
@@ -140,16 +170,28 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
     return { bg: '#059669', text: '#fff' };
   };
 
+  // Build avatar URL same as web frontend
+  const getAvatarUrl = (rawAvatar: string | null | undefined): string | null => {
+    if (!rawAvatar) return null;
+    if (rawAvatar.startsWith('http')) return rawAvatar;
+    const base = apiBaseUrl || '';
+    const path = rawAvatar.startsWith('/')
+      ? rawAvatar
+      : `/uploads/avatar/${rawAvatar}`;
+    return `${base}${path}`;
+  };
+
   const hasCsPermission = !!currentUser?.is_cs;
 
-  // Filter conversations:
-  // Mode CS: ONLY WhatsApp customer chats
-  // Mode Internal: ONLY Internal chats (Staff, Groups, AI Analyst)
+  // Filter conversations — same logic as web ChatPage and tab navigator
   const filteredConversations = conversations.filter(c => {
     const isWaCustomer = c.participants?.some(p => p.username?.startsWith('wa_'));
     if (hasCsPermission) {
       if (csFilterActive && !isWaCustomer) return false;
       if (!csFilterActive && isWaCustomer) return false;
+    } else {
+      // Users without CS permission never see WA customer chats
+      if (isWaCustomer) return false;
     }
     const title = getConversationTitle(c);
     return title.toLowerCase().includes(search.toLowerCase());
@@ -265,8 +307,11 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
             const isDivision = item.name?.startsWith('Divisi ');
             const isGroup = item.type === 'group';
             const isPrivate = item.type === 'private';
-            const other = item.participants?.find(p => String(p.id) !== String(currentUser?.id));
+            const other = item.participants?.find(
+              p => String(p.id) !== String(currentUser?.id),
+            );
             const rawAvatar = item.type === 'group' ? item.avatar : other?.avatar;
+            const avatarUrl = getAvatarUrl(rawAvatar);
 
             return (
               <TouchableOpacity
@@ -274,7 +319,7 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
                   navigation.navigate('ChatDetailScreen', {
                     conversationId: item.id,
                     title,
-                    avatar: rawAvatar,
+                    avatar: avatarUrl,
                     isGroup,
                     isPrivate,
                   })
@@ -284,9 +329,9 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
                 {/* Avatar */}
                 <View
                   style={[styles.avatar, { backgroundColor: avatarBg, overflow: 'hidden' }]}>
-                  {rawAvatar ? (
+                  {avatarUrl ? (
                     <Image
-                      source={{ uri: rawAvatar }}
+                      source={{ uri: avatarUrl }}
                       style={{ width: 52, height: 52, borderRadius: 26 }}
                       resizeMode="cover"
                     />
@@ -299,6 +344,15 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
                       {getAvatarInitial(title)}
                     </Text>
                   )}
+
+                  {/* Unread badge on avatar */}
+                  {item.unreadCount > 0 && (
+                    <View style={styles.avatarBadge}>
+                      <Text style={styles.avatarBadgeText}>
+                        {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                      </Text>
+                    </View>
+                  )}
                 </View>
 
                 {/* Content */}
@@ -310,8 +364,7 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
                         styles.rowTitle,
                         {
                           color: textPrimary,
-                          fontWeight:
-                            item.unreadCount > 0 ? '700' : '600',
+                          fontWeight: item.unreadCount > 0 ? '700' : '600',
                         },
                       ]}>
                       {title}
@@ -321,9 +374,7 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
                         styles.rowTime,
                         {
                           color:
-                            item.unreadCount > 0
-                              ? unreadColor
-                              : textSecondary,
+                            item.unreadCount > 0 ? unreadColor : textSecondary,
                         },
                       ]}>
                       {timeLabel}
@@ -337,27 +388,13 @@ export function ChatListScreen({ navigation }: ChatListScreenProps) {
                         styles.rowSubtitle,
                         {
                           color:
-                            item.unreadCount > 0
-                              ? textPrimary
-                              : textSecondary,
-                          fontWeight:
-                            item.unreadCount > 0 ? '600' : '400',
+                            item.unreadCount > 0 ? textPrimary : textSecondary,
+                          fontWeight: item.unreadCount > 0 ? '600' : '400',
                           flex: 1,
                         },
                       ]}>
                       {subtitle}
                     </Text>
-                    {item.unreadCount > 0 && (
-                      <View
-                        style={[
-                          styles.badge,
-                          { backgroundColor: unreadColor },
-                        ]}>
-                        <Text style={styles.badgeText}>
-                          {item.unreadCount > 99 ? '99+' : item.unreadCount}
-                        </Text>
-                      </View>
-                    )}
                   </View>
                 </View>
               </TouchableOpacity>
@@ -482,6 +519,26 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
+  // Badge on avatar (like web's absolute badge on Avatar)
+  avatarBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#059669',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  avatarBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+  },
   rowContent: {
     flex: 1,
     gap: 2,
@@ -506,19 +563,6 @@ const styles = StyleSheet.create({
   },
   rowSubtitle: {
     fontSize: 13,
-  },
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 5,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
   },
   emptyText: {
     fontSize: 14,

@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { getConversations } from '../services/chat-api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Tab = createBottomTabNavigator();
 
@@ -30,16 +31,37 @@ export function MainTabNavigator() {
   const { hasPermission } = usePermissions();
   const [totalUnread, setTotalUnread] = useState(0);
 
-  // Poll total unread count across all conversations
+  // Poll total unread count — respect the same CS mode filter as chat-list-screen
+  // so the badge only shows unread from conversations visible in the current mode
   useFocusEffect(
     React.useCallback(() => {
       const fetchUnread = async () => {
         try {
           const convs = await getConversations();
-          const total = convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+
+          // Read current user and CS mode state from AsyncStorage
+          const userJson = await AsyncStorage.getItem('@user');
+          const currentUser = userJson ? JSON.parse(userJson) : null;
+          const hasCsPermission = !!currentUser?.is_cs;
+
+          const csSaved = await AsyncStorage.getItem('@chat_cs_mode_active');
+          const csFilterActive = csSaved !== null ? JSON.parse(csSaved) : true;
+
+          // Apply same filter logic as chat-list-screen
+          const isWaCustomer = (conv: (typeof convs)[0]) =>
+            conv.participants?.some(p => p.username?.startsWith('wa_'));
+
+          const visible = hasCsPermission
+            ? csFilterActive
+              ? convs.filter(isWaCustomer)
+              : convs.filter(c => !isWaCustomer(c))
+            : convs.filter(c => !isWaCustomer(c));
+
+          const total = visible.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
           setTotalUnread(total);
         } catch (_) {}
       };
+
       fetchUnread();
       const interval = setInterval(fetchUnread, 8000);
       return () => clearInterval(interval);

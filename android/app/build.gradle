@@ -74,17 +74,17 @@ def enableProguardInReleaseBuilds = false
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
-    ndkVersion rootProject.ext.ndkVersion
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdk rootProject.ext.compileSdkVersion
+    ndkVersion = rootProject.ext.ndkVersion
+    buildToolsVersion = rootProject.ext.buildToolsVersion
+    compileSdk = rootProject.ext.compileSdkVersion
 
-    namespace "com.grocylite"
+    namespace = "com.grocylite"
     defaultConfig {
         applicationId "com.grocylite"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 9
-        versionName "2.0.1"
+        versionName "2.0.2"
     }
     signingConfigs {
         debug {
@@ -96,11 +96,11 @@ android {
     }
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
+            signingConfig = signingConfigs.debug
             manifestPlaceholders = [usesCleartextTraffic:"true"]
         }
         release {
-            signingConfig signingConfigs.debug
+            signingConfig = signingConfigs.debug
             // F-Droid will sign the APK with their own key
             manifestPlaceholders = [usesCleartextTraffic:"true"]
             minifyEnabled enableProguardInReleaseBuilds
