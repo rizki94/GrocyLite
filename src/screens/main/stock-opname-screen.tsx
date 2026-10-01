@@ -229,7 +229,7 @@ const InvoiceItemRow = memo(
     const sysValue =
       item.sys_stock !== undefined
         ? Number(item.sys_stock)
-        : getSystemStock(item.product_id);
+        : getSystemStock(item.product_id, item.source || source);
     const totalPhys = calculateTotal(item);
 
     const prodInfo = {
@@ -246,7 +246,7 @@ const InvoiceItemRow = memo(
     };
 
     const handleRefresh = () => {
-      if (onRefreshItem) onRefreshItem(item.product_id);
+      if (onRefreshItem) onRefreshItem(item.product_id, item.source || source);
     };
 
     return (
@@ -878,7 +878,7 @@ export function StockOpnameScreen() {
     setShowScrollToBottom(true);
   };
 
-  const handleRefreshItem = async (productId: string) => {
+  const handleRefreshItem = async (productId: string, source?: string) => {
     if (isOffline) {
       Alert.alert(t('element.error'), t('element.mustConnectInternet'));
       return;
@@ -887,15 +887,29 @@ export function StockOpnameScreen() {
     try {
       setIsRefreshingSystem(productId);
       const response = await apiClient.get(`api/bridge/product_stock`, {
-        params: { product_id: productId },
+        params: { product_id: productId, source: source },
       });
 
-      const detail = response.data[0];
+      const detail =
+        response.data.find((d: any) => !source || d.Source === source) ||
+        response.data[0];
       if (detail) {
         setItems(prev =>
           prev.map(item =>
-            item.product_id === productId
-              ? ({ ...item, sys_stock: Number(detail.Stock) } as InvoiceItem)
+            item.product_id === productId && (!source || item.source === source)
+              ? ({
+                  ...item,
+                  sys_stock: Number(detail.Stock),
+                  source: item.source || detail.Source,
+                  ratio1: detail.ratio1 ?? item.ratio1,
+                  ratio2: detail.ratio2 ?? item.ratio2,
+                  ratio3: detail.ratio3 ?? item.ratio3,
+                  ratio4: detail.ratio4 ?? item.ratio4,
+                  unit1: detail.unit1 ?? item.unit1,
+                  unit2: detail.unit2 ?? item.unit2,
+                  unit3: detail.unit3 ?? item.unit3,
+                  unit4: detail.unit4 ?? item.unit4,
+                } as InvoiceItem)
               : item,
           ),
         );
@@ -931,13 +945,21 @@ export function StockOpnameScreen() {
               const response = await apiClient.get('/api/bridge/stock_system');
               if (response.data) {
                 const stockMap = new Map<string, number>(
-                  response.data.map((s: any) => [s.PKey, Number(s.Stock)]),
+                  response.data.map((s: any) => [`${s.PKey}_${s.Source}`, Number(s.Stock)]),
                 );
                 setItems(prev =>
-                  prev.map(item => ({
-                    ...item,
-                    sys_stock: stockMap.get(item.product_id) ?? item.sys_stock,
-                  })),
+                  prev.map(item => {
+                    const key = `${item.product_id}_${item.source || 'NON'}`;
+                    const sysStock =
+                      stockMap.get(key) ??
+                      stockMap.get(`${item.product_id}_PKP`) ??
+                      stockMap.get(`${item.product_id}_NON`) ??
+                      item.sys_stock;
+                    return {
+                      ...item,
+                      sys_stock: sysStock,
+                    };
+                  }),
                 );
                 setStock(response.data);
                 await AsyncStorage.setItem(
@@ -1001,8 +1023,16 @@ export function StockOpnameScreen() {
   }, []);
 
   const getSystemStock = useCallback(
-    (productId: string) => {
-      return stock?.find((s: any) => s.PKey === productId)?.Stock || 0;
+    (productId: string, source?: string) => {
+      if (source) {
+        const found = stock?.find(
+          (s: any) => s.PKey === productId && s.Source === source,
+        );
+        if (found) return found.Stock || 0;
+      }
+      return (
+        stock?.find((s: any) => s.PKey === productId)?.Stock || 0
+      );
     },
     [stock],
   );
@@ -1022,7 +1052,7 @@ export function StockOpnameScreen() {
       const sysStock =
         item.sys_stock !== undefined
           ? Number(item.sys_stock)
-          : getSystemStock(item.product_id);
+          : getSystemStock(item.product_id, item.source);
       return total - sysStock;
     },
     [calculateTotal, getSystemStock],
