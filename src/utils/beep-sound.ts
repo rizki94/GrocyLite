@@ -1,11 +1,10 @@
-import { NativeModules, Vibration } from 'react-native';
+import { NativeModules } from 'react-native';
 
 const { BeepSound } = NativeModules;
 
 export const playBeepSuccess = () => {
   try {
-    Vibration.vibrate(80);
-    if (BeepSound?.playSuccess) {
+    if (BeepSound && typeof BeepSound.playSuccess === 'function') {
       BeepSound.playSuccess();
     }
   } catch (e) {
@@ -15,8 +14,7 @@ export const playBeepSuccess = () => {
 
 export const playBeepError = () => {
   try {
-    Vibration.vibrate([0, 250, 100, 250]);
-    if (BeepSound?.playError) {
+    if (BeepSound && typeof BeepSound.playError === 'function') {
       BeepSound.playError();
     }
   } catch (e) {
