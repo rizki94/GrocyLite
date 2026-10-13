@@ -44,6 +44,7 @@ import { AttendanceRouteScreen } from './src/screens/main/attendance-route-scree
 import { ProductsScreen } from './src/screens/main/products-screen';
 import { SalesOrderScreen } from './src/screens/sales/sales-order-screen';
 import { ChatDetailScreen } from './src/screens/chat/chat-detail-screen';
+import { ResiScanScreen } from './src/screens/main/resi-scan-screen';
 import { useFcm } from './src/hooks/use-fcm';
 import { navigationRef } from './src/lib/navigation';
 
@@ -158,6 +159,10 @@ export default function App() {
                         <Stack.Screen
                           name="ChatDetailScreen"
                           component={ChatDetailScreen}
+                        />
+                        <Stack.Screen
+                          name="ResiScan"
+                          component={ResiScanScreen}
                         />
                       </>
                     ) : (

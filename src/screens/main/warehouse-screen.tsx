@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
-import { FileText, Package, RotateCcw, ArrowRight } from 'lucide-react-native';
+import { FileText, Package, RotateCcw, ArrowRight, ScanBarcode } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeColor } from '../../lib/colors';
 import { usePermissions } from '../../hooks/use-permissions';
@@ -32,6 +32,14 @@ export function WarehouseScreen() {
   }, []);
 
   const menuItems = [
+    {
+      title: 'Scan Resi Kurir',
+      icon: ScanBarcode,
+      color: '#10b981',
+      bgColor: 'bg-emerald-500/10 dark:bg-emerald-400/20',
+      route: 'ResiScan',
+      permission: null,
+    },
     {
       title: t('warehouse.stockOpname.title'),
       icon: FileText,
