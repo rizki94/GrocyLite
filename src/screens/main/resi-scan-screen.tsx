@@ -11,7 +11,6 @@ import {
   StyleSheet,
   Alert,
   ToastAndroid,
-  Platform,
 } from 'react-native';
 import {
   Camera,
@@ -28,7 +27,6 @@ import {
   RotateCw,
   Search,
   ScanBarcode,
-  CheckCircle2,
   XCircle,
   AlertTriangle,
   Flashlight,
@@ -38,12 +36,11 @@ import {
   PackageCheck,
   ChevronDown,
   ChevronRight,
-  Filter,
   Info,
-  Clock,
-  MapPin,
+  AlertCircle,
 } from 'lucide-react-native';
 import { useConnection } from '../../hooks/use-connection';
+import { useResiScanCache } from '../../hooks/use-resi-scan-cache';
 import { useThemeColor } from '../../lib/colors';
 import { cn } from '../../lib/utils';
 import { Input } from '../../components/ui/input';
@@ -52,12 +49,19 @@ import { playBeepSuccess, playBeepError } from '../../utils/beep-sound';
 
 export interface MarketplaceTransactionItem {
   id: number | string;
+  ids?: (number | string)[];
   date: string;
   local_invoice: string;
+  local_invoices?: string[];
   marketplace_invoice?: string;
   tracking_number?: string;
   courier_code?: string;
   courier_raw?: string;
+  sources?: string[];
+  source?: string;
+  erp_statuses?: string[];
+  erp_status?: string;
+  local_amount?: number;
   status?: string;
   tracking_status?: string;
   tracking_last_checked_at?: string;
@@ -104,23 +108,40 @@ const COMMON_COURIERS = [
   { label: 'GoSend', value: 'gosend' },
 ];
 
+export const isUnsupportedTrackingCourier = (
+  courierCode?: string | null,
+  courierRaw?: string | null
+): boolean => {
+  const normalize = (c: string | null | undefined) =>
+    String(c || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  return [courierCode, courierRaw].some((c) =>
+    normalize(c).startsWith('jne')
+  );
+};
+
 export function ResiScanScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const colors = useThemeColor();
-  const { apiClient } = useConnection();
 
-  // Filters state
+  // Cache hook — fetches full day data, all filtering done client-side
+  const {
+    allTransactions,
+    isLoading,
+    isRefreshing,
+    lastFetchedAt,
+    syncTransactions,
+    updateItemLocally,
+    markCancelledLocally,
+  } = useResiScanCache();
+
+  // Filters state (all applied client-side)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedCourier, setSelectedCourier] = useState<string>('all');
   const [checkStatusFilter, setCheckStatusFilter] = useState<'false' | 'true' | 'all'>('false');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
-
-  // Transactions data
-  const [transactions, setTransactions] = useState<MarketplaceTransactionItem[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Scanner modal state
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
@@ -147,6 +168,13 @@ export function ResiScanScreen() {
   // Tracking Detail Modal state
   const [selectedTrackingItem, setSelectedTrackingItem] = useState<MarketplaceTransactionItem | null>(null);
   const [isRefreshingTracking, setIsRefreshingTracking] = useState<boolean>(false);
+
+  // Quick Cancel Modal state
+  const [isQuickCancelOpen, setIsQuickCancelOpen] = useState<boolean>(false);
+  const [cancelInput, setCancelInput] = useState<string>('');
+  const [cancelNotes, setCancelNotes] = useState<string>('');
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState<boolean>(false);
+  const [isSubmittingDirectCancel, setIsSubmittingDirectCancel] = useState<boolean>(false);
 
   // Scanner locks & cooldowns
   const lastScannedCodeRef = useRef<string | null>(null);
@@ -179,55 +207,64 @@ export function ResiScanScreen() {
     }
   }, [hasPermission, requestPermission]);
 
-  // Fetch transactions from API
-  const fetchTransactions = useCallback(
-    async (isRefresh: boolean = false) => {
-      if (isRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
-
-      try {
-        const formattedDate = moment(selectedDate).format('YYYY-MM-DD');
-        const params: Record<string, any> = {
-          date: formattedDate,
-          per_page: 500, // Load full daily batch for quick warehouse check
-        };
-
-        if (selectedCourier && selectedCourier !== 'all') {
-          params.courier = selectedCourier;
-        }
-
-        if (checkStatusFilter !== 'all') {
-          params.sudah_dicek = checkStatusFilter;
-        }
-
-        if (debouncedSearch.trim()) {
-          params.search = debouncedSearch.trim();
-        }
-
-        const response = await apiClient.get('api/online/bridge/transactions/scan-list', { params });
-        const list: MarketplaceTransactionItem[] = response.data?.data || [];
-        setTransactions(list);
-      } catch (error: any) {
-        console.error('Error fetching marketplace transactions:', error);
-        ToastAndroid.show('Gagal memuat data transaksi', ToastAndroid.SHORT);
-      } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    },
-    [apiClient, selectedDate, selectedCourier, checkStatusFilter, debouncedSearch]
-  );
-
+  // Sync from cache/server whenever date changes
   useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+    const dateStr = moment(selectedDate).format('YYYY-MM-DD');
+    syncTransactions(dateStr, false);
+  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle Mark Checked via API
+  // Client-side filter applied on top of full cached dataset
+  const transactions = useMemo(() => {
+    let list = allTransactions;
+
+    // Courier filter
+    if (selectedCourier && selectedCourier !== 'all') {
+      const needle = selectedCourier.toLowerCase();
+      list = list.filter((item) => {
+        const code = (item.courier_code || '').toLowerCase();
+        const raw = (item.courier_raw || '').toLowerCase();
+        return code.includes(needle) || raw.includes(needle);
+      });
+    }
+
+    // Checked status filter
+    if (checkStatusFilter === 'true') {
+      list = list.filter((item) => item.sudah_dicek);
+    } else if (checkStatusFilter === 'false') {
+      list = list.filter((item) => !item.sudah_dicek);
+    }
+
+    // Search filter
+    const q = debouncedSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (item) =>
+          (item.tracking_number || '').toLowerCase().includes(q) ||
+          (item.marketplace_invoice || '').toLowerCase().includes(q) ||
+          (item.local_invoice || '').toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [allTransactions, selectedCourier, checkStatusFilter, debouncedSearch]);
+
+  // Handle Mark Checked via API — optimistically updates local cache
+  const { apiClient } = useConnection();
   const handleMarkChecked = useCallback(
     async (codeToProcess: string, targetSudahDicek: boolean = true) => {
+      // Optimistic update immediately so count changes feel instant
+      updateItemLocally(
+        (item) =>
+          item.tracking_number === codeToProcess ||
+          item.marketplace_invoice === codeToProcess ||
+          item.local_invoice === codeToProcess,
+        (item) => ({
+          ...item,
+          sudah_dicek: targetSudahDicek,
+          checked_at: moment().format('YYYY-MM-DD HH:mm:ss'),
+        })
+      );
+
       try {
         const response = await apiClient.post('api/online/bridge/transactions/mark-checked', {
           tracking_number: codeToProcess,
@@ -237,40 +274,50 @@ export function ResiScanScreen() {
         const resData = response?.data;
         const updatedItem = resData?.data;
 
-        // Update in local state
-        setTransactions((prev) =>
-          prev.map((item) => {
-            if (
+        // Reconcile with server response (tracking_status may have been updated)
+        if (updatedItem) {
+          updateItemLocally(
+            (item) =>
               item.tracking_number === codeToProcess ||
               item.marketplace_invoice === codeToProcess ||
               item.local_invoice === codeToProcess ||
-              (updatedItem && item.id === updatedItem.id)
-            ) {
-              return {
-                ...item,
-                sudah_dicek: targetSudahDicek,
-                checked_at: updatedItem?.checked_at || moment().format('YYYY-MM-DD HH:mm:ss'),
-                tracking_status: updatedItem?.tracking_status || item.tracking_status,
-                tracking_details: updatedItem?.tracking_details || item.tracking_details,
-                tracking_last_checked_at: updatedItem?.tracking_last_checked_at || item.tracking_last_checked_at,
-              };
-            }
-            return item;
-          })
-        );
+              item.id === updatedItem.id,
+            (item) => ({
+              ...item,
+              sudah_dicek: targetSudahDicek,
+              checked_at: updatedItem.checked_at || item.checked_at,
+              tracking_status: updatedItem.tracking_status || item.tracking_status,
+              tracking_details: updatedItem.tracking_details || item.tracking_details,
+              tracking_last_checked_at: updatedItem.tracking_last_checked_at || item.tracking_last_checked_at,
+            })
+          );
+        }
 
         return resData;
       } catch (error: any) {
+        // Roll back optimistic update on failure
+        updateItemLocally(
+          (item) =>
+            item.tracking_number === codeToProcess ||
+            item.marketplace_invoice === codeToProcess ||
+            item.local_invoice === codeToProcess,
+          (item) => ({ ...item, sudah_dicek: !targetSudahDicek })
+        );
         console.error('Error mark checked:', error);
         throw error;
       }
     },
-    [apiClient]
+    [apiClient, updateItemLocally]
   );
 
   // Refresh live tracking on-demand via CekResi microservice
   const handleRefreshTracking = useCallback(
     async (item: MarketplaceTransactionItem) => {
+      if (isUnsupportedTrackingCourier(item.courier_code, item.courier_raw)) {
+        ToastAndroid.show('Pelacakan JNE belum didukung. Periksa status via marketplace.', ToastAndroid.LONG);
+        return;
+      }
+
       if (!item.tracking_number && !item.id) {
         ToastAndroid.show('Nomor resi tidak tersedia untuk dilacak', ToastAndroid.SHORT);
         return;
@@ -295,20 +342,15 @@ export function ResiScanScreen() {
           };
           const nowStr = moment().format('YYYY-MM-DD HH:mm:ss');
 
-          setTransactions((prev) =>
-            prev.map((t) => {
-              if (
-                t.id === item.id ||
-                (t.marketplace_invoice && t.marketplace_invoice === item.marketplace_invoice)
-              ) {
-                return {
-                  ...t,
-                  tracking_status: newStatus,
-                  tracking_details: newDetails,
-                  tracking_last_checked_at: nowStr,
-                };
-              }
-              return t;
+          updateItemLocally(
+            (t) =>
+              t.id === item.id ||
+              (!!t.marketplace_invoice && t.marketplace_invoice === item.marketplace_invoice),
+            (t) => ({
+              ...t,
+              tracking_status: newStatus,
+              tracking_details: newDetails,
+              tracking_last_checked_at: nowStr,
             })
           );
 
@@ -334,7 +376,64 @@ export function ResiScanScreen() {
         setIsRefreshingTracking(false);
       }
     },
-    [apiClient]
+    [apiClient, updateItemLocally]
+  );
+
+  // Direct Cancel Handler for Dialog Detail Invoice
+  const handleDirectCancelItem = useCallback(
+    (item: MarketplaceTransactionItem | null) => {
+      if (!item) return;
+      const targetInvoice = item.marketplace_invoice || item.tracking_number || item.local_invoice;
+      if (!targetInvoice) return;
+
+      Alert.alert(
+        'Tandai Pesanan Batal?',
+        `Apakah Anda yakin ingin membatalkan pesanan "${targetInvoice}"? Pesanan yang dibatalkan akan memicu peringatan error keras jika barcode-nya di-scan.`,
+        [
+          { text: 'Batal', style: 'cancel' },
+          {
+            text: 'Ya, Tandai Batal',
+            style: 'destructive',
+            onPress: async () => {
+              setIsSubmittingDirectCancel(true);
+              try {
+                const identifiers = [
+                  item.tracking_number || '',
+                  item.marketplace_invoice || '',
+                  item.local_invoice || '',
+                ].filter(Boolean);
+
+                // 1. Optimistic local update
+                markCancelledLocally(identifiers);
+
+                setSelectedTrackingItem((prev) =>
+                  prev ? { ...prev, status: 'Cancelled' } : null
+                );
+
+                // 2. Call backend API
+                await apiClient.post('api/online/bridge/transactions/quick-cancel', {
+                  invoice: targetInvoice,
+                  notes: 'Dibatalkan langsung dari detail invoice',
+                });
+
+                ToastAndroid.show('Pesanan berhasil ditandai batal.', ToastAndroid.SHORT);
+
+                // 3. Background sync
+                const dateStr = moment(selectedDate).format('YYYY-MM-DD');
+                syncTransactions(dateStr, true).catch(() => {});
+              } catch (err: any) {
+                console.error('Error cancelling order directly:', err);
+                const errMsg = err?.response?.data?.message || 'Gagal menandai pesanan sebagai batal.';
+                Alert.alert('Gagal', errMsg);
+              } finally {
+                setIsSubmittingDirectCancel(false);
+              }
+            },
+          },
+        ]
+      );
+    },
+    [apiClient, markCancelledLocally, selectedDate, syncTransactions]
   );
 
   // Fast Barcode Scanner Processor
@@ -415,6 +514,60 @@ export function ResiScanScreen() {
     [handleMarkChecked]
   );
 
+  // Quick Cancel Submit Handler
+  const handleQuickCancelSubmit = useCallback(async () => {
+    const rawInput = cancelInput.trim();
+    if (!rawInput) {
+      ToastAndroid.show('Masukkan nomor invoice atau resi yang ingin dibatalkan.', ToastAndroid.SHORT);
+      return;
+    }
+
+    // Parse multi-value: split by newline, comma, or whitespace
+    const entries = rawInput
+      .split(/[\n,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (entries.length === 0) {
+      ToastAndroid.show('Tidak ada nomor valid yang ditemukan.', ToastAndroid.SHORT);
+      return;
+    }
+
+    setIsSubmittingCancel(true);
+    try {
+      const response = await apiClient.post('api/online/bridge/transactions/quick-cancel', {
+        identifiers: entries,
+        notes: cancelNotes.trim() || null,
+      });
+
+      const resData = response?.data;
+      const cancelledCount = resData?.cancelled_count ?? entries.length;
+      const notFoundCount = resData?.not_found_count ?? 0;
+
+      // Optimistically mark cancelled in local cache immediately
+      markCancelledLocally(entries);
+
+      // Silently sync in background to get authoritative server data
+      const dateStr = moment(selectedDate).format('YYYY-MM-DD');
+      syncTransactions(dateStr, true).catch(() => {});
+
+      setIsQuickCancelOpen(false);
+      setCancelInput('');
+      setCancelNotes('');
+
+      const msg = notFoundCount > 0
+        ? `${cancelledCount} ditandai batal, ${notFoundCount} tidak ditemukan.`
+        : `${cancelledCount} pesanan berhasil ditandai sebagai batal.`;
+      ToastAndroid.show(msg, ToastAndroid.LONG);
+    } catch (err: any) {
+      console.error('Error quick cancel:', err);
+      const errMsg = err?.response?.data?.message || 'Gagal menandai pesanan sebagai batal.';
+      ToastAndroid.show(errMsg, ToastAndroid.LONG);
+    } finally {
+      setIsSubmittingCancel(false);
+    }
+  }, [apiClient, cancelInput, cancelNotes, markCancelledLocally, syncTransactions, selectedDate]);
+
   // Vision Camera Code Scanner Hook
   const codeScanner = useCodeScanner({
     codeTypes: [
@@ -454,11 +607,11 @@ export function ResiScanScreen() {
     },
   });
 
-  // Calculate counters
-  const totalCount = transactions.length;
+  // Counts derived from FULL unfiltered dataset — stable regardless of active filter tab
+  const totalCount = allTransactions.length;
   const checkedCount = useMemo(
-    () => transactions.filter((t) => t.sudah_dicek).length,
-    [transactions]
+    () => allTransactions.filter((t) => t.sudah_dicek).length,
+    [allTransactions]
   );
   const uncheckedCount = totalCount - checkedCount;
 
@@ -469,7 +622,12 @@ export function ResiScanScreen() {
     );
     const trackingStatus = (item.tracking_status || '').toUpperCase();
     const isTrackingCancelled = ['CANCELLED', 'RETURNED', 'BATAL', 'RETUR'].includes(trackingStatus);
-    const hasNoTracking = !trackingStatus || trackingStatus === 'PENDING' || trackingStatus === 'NOT_FOUND';
+    const isUnsupported =
+      trackingStatus === 'UNSUPPORTED' ||
+      isUnsupportedTrackingCourier(item.courier_code, item.courier_raw);
+    const hasNoTracking =
+      !isUnsupported &&
+      (!trackingStatus || trackingStatus === 'PENDING' || trackingStatus === 'NOT_FOUND');
 
     return (
       <TouchableOpacity
@@ -485,8 +643,8 @@ export function ResiScanScreen() {
         )}
       >
         <View className="flex-row items-center justify-between mb-2">
-          {/* Courier & Marketplace Badge */}
-          <View className="flex-1 flex-row items-center gap-1.5 mr-2">
+          {/* Courier & Marketplace & Source Badge */}
+          <View className="flex-1 flex-row flex-wrap items-center gap-1.5 mr-2">
             <View className="bg-primary/10 rounded-lg px-2.5 py-1 flex-row items-center shrink max-w-[72%]">
               <Truck size={13} color={colors.primary} />
               <Text
@@ -502,6 +660,38 @@ export function ResiScanScreen() {
               <View className="bg-secondary/40 rounded-lg px-2 py-1 shrink-0">
                 <Text className="text-[11px] font-semibold text-foreground">
                   {item.marketplace.name}
+                </Text>
+              </View>
+            )}
+
+            {/* Source Badge (PKP / NON / PKP, NON) */}
+            {item.source && (
+              <View className="bg-indigo-500/10 rounded-lg px-2 py-1 shrink-0 border border-indigo-500/20">
+                <Text className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase">
+                  {item.source}
+                </Text>
+              </View>
+            )}
+
+            {/* ERP Status Badge (OP / RL) */}
+            {item.erp_status && (
+              <View
+                className={cn(
+                  'rounded-lg px-2 py-1 shrink-0 border',
+                  item.erp_status.includes('OP')
+                    ? 'bg-amber-500/10 border-amber-500/30'
+                    : 'bg-slate-500/10 border-slate-500/20'
+                )}
+              >
+                <Text
+                  className={cn(
+                    'text-[10px] font-black uppercase',
+                    item.erp_status.includes('OP')
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-muted-foreground'
+                  )}
+                >
+                  ERP: {item.erp_status}
                 </Text>
               </View>
             )}
@@ -553,9 +743,14 @@ export function ResiScanScreen() {
         {/* Invoice & Tracking Status */}
         <View className="flex-row items-center justify-between pt-2 border-t border-border/50 mt-1">
           <View className="flex-1 mr-2">
-            <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+            <Text className="text-xs font-semibold text-foreground" numberOfLines={1}>
               {item.marketplace_invoice || item.local_invoice}
             </Text>
+            {item.local_invoice && item.marketplace_invoice && item.marketplace_invoice !== item.local_invoice && (
+              <Text className="text-[10px] text-muted-foreground" numberOfLines={1}>
+                Faktur: {item.local_invoice}
+              </Text>
+            )}
           </View>
 
           {/* Warning / Status Badge */}
@@ -569,6 +764,13 @@ export function ResiScanScreen() {
                 <AlertTriangle size={12} color="#ffffff" />
                 <Text className="text-[11px] font-black text-white ml-1">
                   {isCancelled ? 'ORDER CANCELLED' : 'RESI BATAL'}
+                </Text>
+              </View>
+            ) : isUnsupported ? (
+              <View className="bg-slate-500/10 dark:bg-slate-800 rounded-lg px-2 py-0.5 flex-row items-center border border-slate-300 dark:border-slate-700">
+                <AlertCircle size={12} color={colors.mutedForeground} />
+                <Text className="text-[11px] font-bold text-slate-600 dark:text-slate-300 ml-1">
+                  Tidak Didukung
                 </Text>
               </View>
             ) : (
@@ -623,16 +825,30 @@ export function ResiScanScreen() {
           <View>
             <Text className="text-xl font-black text-foreground">Scan Pengecekan Resi</Text>
             <Text className="text-xs text-muted-foreground font-medium">
-              Pastikan paket valid sebelum dikirim ke kurir
+              {lastFetchedAt
+                ? `Data: ${totalCount} resi · Sync ${moment(lastFetchedAt).format('HH:mm')}`
+                : 'Pastikan paket valid sebelum dikirim ke kurir'}
             </Text>
           </View>
         </View>
-        <TouchableOpacity
-          onPress={() => fetchTransactions(true)}
-          className="p-2 rounded-full bg-secondary/30"
-        >
-          <RotateCcw size={18} color={colors.foreground} />
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-2">
+          {/* Quick Cancel Button (Option B) */}
+          <TouchableOpacity
+            onPress={() => setIsQuickCancelOpen(true)}
+            className="flex-row items-center bg-red-500/10 border border-red-500/30 px-2.5 py-1.5 rounded-full"
+            activeOpacity={0.7}
+          >
+            <XCircle size={15} color="#ef4444" />
+            <Text className="text-xs font-black text-red-500 ml-1">Batal</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => syncTransactions(moment(selectedDate).format('YYYY-MM-DD'), true)}
+            className="p-2 rounded-full bg-secondary/30"
+          >
+            <RotateCcw size={18} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filter Section */}
@@ -759,7 +975,7 @@ export function ResiScanScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
-              onRefresh={() => fetchTransactions(true)}
+              onRefresh={() => syncTransactions(moment(selectedDate).format('YYYY-MM-DD'), true)}
               colors={[colors.primary]}
             />
           }
@@ -1111,6 +1327,9 @@ export function ResiScanScreen() {
                           ? 'bg-emerald-500/15'
                           : selectedTrackingItem?.tracking_status === 'INVALID' || selectedTrackingItem?.tracking_status === 'RETURN'
                           ? 'bg-red-500/15'
+                          : selectedTrackingItem?.tracking_status === 'UNSUPPORTED' ||
+                            isUnsupportedTrackingCourier(selectedTrackingItem?.courier_code, selectedTrackingItem?.courier_raw)
+                          ? 'bg-slate-500/10'
                           : 'bg-primary/15'
                       )}
                     >
@@ -1121,10 +1340,16 @@ export function ResiScanScreen() {
                             ? 'text-emerald-600 dark:text-emerald-400'
                             : selectedTrackingItem?.tracking_status === 'INVALID' || selectedTrackingItem?.tracking_status === 'RETURN'
                             ? 'text-red-600 dark:text-red-400'
+                            : selectedTrackingItem?.tracking_status === 'UNSUPPORTED' ||
+                              isUnsupportedTrackingCourier(selectedTrackingItem?.courier_code, selectedTrackingItem?.courier_raw)
+                            ? 'text-slate-500 dark:text-slate-400'
                             : 'text-primary'
                         )}
                       >
-                        {selectedTrackingItem?.tracking_status || 'PENDING'}
+                        {selectedTrackingItem?.tracking_status === 'UNSUPPORTED' ||
+                        isUnsupportedTrackingCourier(selectedTrackingItem?.courier_code, selectedTrackingItem?.courier_raw)
+                          ? 'Tidak Didukung'
+                          : (selectedTrackingItem?.tracking_status || 'PENDING')}
                       </Text>
                     </View>
                   </View>
@@ -1137,13 +1362,25 @@ export function ResiScanScreen() {
                 )}
               </View>
 
-              {/* Action: Refresh Button */}
-              {selectedTrackingItem?.tracking_number ? (
+              {/* Action: Refresh Button or Unsupported Notice */}
+              {isUnsupportedTrackingCourier(selectedTrackingItem?.courier_code, selectedTrackingItem?.courier_raw) ? (
+                <View className="bg-slate-500/10 border border-slate-300 dark:border-slate-700 p-3.5 rounded-2xl mb-4 flex-row items-start gap-2.5">
+                  <AlertCircle size={18} color={colors.mutedForeground} className="mt-0.5 shrink-0" />
+                  <View className="flex-1">
+                    <Text className="text-xs font-bold text-foreground">
+                      Pelacakan JNE Tidak Didukung
+                    </Text>
+                    <Text className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      Pelacakan live resi JNE belum didukung. Periksa status pengiriman terbaru langsung melalui Seller Center marketplace.
+                    </Text>
+                  </View>
+                </View>
+              ) : selectedTrackingItem?.tracking_number ? (
                 <TouchableOpacity
                   onPress={() => handleRefreshTracking(selectedTrackingItem)}
                   disabled={isRefreshingTracking}
                   activeOpacity={0.8}
-                  className="bg-primary/15 border border-primary/30 py-3 rounded-2xl flex-row items-center justify-center mb-4"
+                  className="bg-primary/15 border border-primary/30 py-3 rounded-2xl flex-row items-center justify-center mb-2.5"
                 >
                   {isRefreshingTracking ? (
                     <>
@@ -1162,6 +1399,41 @@ export function ResiScanScreen() {
                   )}
                 </TouchableOpacity>
               ) : null}
+
+              {/* Action: Direct Cancel Order Button */}
+              {['cancelled', 'cancel', 'batal', 'returned', 'retur'].includes(
+                (selectedTrackingItem?.status || '').toLowerCase()
+              ) ? (
+                <View className="bg-red-500/10 border border-red-500/30 p-3 rounded-2xl flex-row items-center mb-4">
+                  <XCircle size={18} color="#ef4444" className="mr-2 shrink-0" />
+                  <Text className="text-red-600 dark:text-red-400 font-black text-xs flex-1">
+                    Pesanan Ini Berstatus DIBATALKAN (Cancelled)
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => handleDirectCancelItem(selectedTrackingItem)}
+                  disabled={isSubmittingDirectCancel}
+                  activeOpacity={0.8}
+                  className="bg-red-500/10 border border-red-500/30 py-3 rounded-2xl flex-row items-center justify-center mb-4"
+                >
+                  {isSubmittingDirectCancel ? (
+                    <>
+                      <ActivityIndicator size="small" color="#ef4444" />
+                      <Text className="text-red-600 dark:text-red-400 font-black text-xs uppercase ml-2 tracking-wider">
+                        Membatalkan Pesanan...
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={16} color="#ef4444" />
+                      <Text className="text-red-600 dark:text-red-400 font-black text-xs uppercase ml-2 tracking-wider">
+                        Tandai Pesanan Batal
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
 
               {/* Package Details (if available) */}
               {(selectedTrackingItem?.tracking_details?.detail?.sender ||
@@ -1264,12 +1536,118 @@ export function ResiScanScreen() {
                       Belum ada riwayat pelacakan rinci
                     </Text>
                     <Text className="text-[11px] text-muted-foreground mt-1 text-center">
-                      {selectedTrackingItem?.courier_raw?.toLowerCase().includes('instant')
+                      {isUnsupportedTrackingCourier(selectedTrackingItem?.courier_code, selectedTrackingItem?.courier_raw)
+                        ? 'Pelacakan live JNE belum didukung. Periksa status pengiriman melalui Seller Center marketplace.'
+                        : selectedTrackingItem?.courier_raw?.toLowerCase().includes('instant')
                         ? 'Pengiriman instan marketplace tidak menggunakan airwaybill reguler eksternal.'
                         : 'Tekan "Refresh Status dari Kurir" di atas untuk memperbarui dari ekspedisi.'}
                     </Text>
                   </View>
                 )}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      {/* Quick Cancel Modal (Option B) */}
+      <Modal
+        visible={isQuickCancelOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsQuickCancelOpen(false)}
+      >
+        <View className="flex-1 bg-black/60 justify-end">
+          <View
+            className="bg-card rounded-t-3xl border-t border-border p-5 max-h-[85%]"
+            style={{ paddingBottom: Math.max(insets.bottom, 20) }}
+          >
+            {/* Modal Header */}
+            <View className="flex-row items-center justify-between pb-3 border-b border-border/60 mb-4">
+              <View className="flex-row items-center gap-2">
+                <View className="p-2 rounded-full bg-red-500/10">
+                  <XCircle size={20} color="#ef4444" />
+                </View>
+                <View>
+                  <Text className="text-base font-black text-foreground">
+                    Tandai Pesanan Batal
+                  </Text>
+                  <Text className="text-[11px] text-muted-foreground">
+                    Cegah pengiriman paket yang dibatalkan pembeli
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsQuickCancelOpen(false)}
+                className="p-1.5 rounded-full bg-secondary/50"
+              >
+                <X size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Modal Body */}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text className="text-xs font-bold text-foreground mb-1.5">
+                Nomor Invoice / Resi yang Batal
+              </Text>
+              <Text className="text-[11px] text-muted-foreground mb-2">
+                Bisa masukkan 1 atau beberapa nomor (pisahkan dengan enter, koma, atau spasi).
+              </Text>
+              <Input
+                value={cancelInput}
+                onChangeText={setCancelInput}
+                placeholder="Contoh: 261014..., SPXID..., BD-BSJ..."
+                multiline
+                numberOfLines={4}
+                className="h-28 text-xs font-mono mb-3"
+                style={{ textAlignVertical: 'top' }}
+              />
+
+              <Text className="text-xs font-bold text-foreground mb-1.5">
+                Catatan Pembatalan (Opsional)
+              </Text>
+              <Input
+                value={cancelNotes}
+                onChangeText={setCancelNotes}
+                placeholder="Dibatalkan oleh pembeli di marketplace"
+                className="h-10 text-xs mb-4"
+              />
+
+              <View className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4 flex-row items-start gap-2">
+                <AlertTriangle size={16} color="#ef4444" className="mt-0.5 shrink-0" />
+                <Text className="text-[11px] text-red-600 dark:text-red-400 flex-1 leading-relaxed">
+                  Pesanan yang ditandai batal akan otomatis memicu sirene error dan peringatan merah jika barcode-nya tidak sengaja di-scan di gudang.
+                </Text>
+              </View>
+
+              {/* Action Buttons */}
+              <View className="flex-row gap-2 mt-2">
+                <TouchableOpacity
+                  onPress={() => setIsQuickCancelOpen(false)}
+                  disabled={isSubmittingCancel}
+                  className="flex-1 py-3 rounded-xl border border-input items-center justify-center bg-secondary/20"
+                >
+                  <Text className="text-xs font-bold text-muted-foreground">Batal</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleQuickCancelSubmit}
+                  disabled={isSubmittingCancel}
+                  className="flex-2 py-3 rounded-xl bg-red-600 items-center justify-center flex-row shadow-sm"
+                >
+                  {isSubmittingCancel ? (
+                    <>
+                      <ActivityIndicator size="small" color="#ffffff" />
+                      <Text className="text-xs font-black text-white ml-2">Memproses...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={16} color="#ffffff" />
+                      <Text className="text-xs font-black text-white ml-1.5">
+                        Tandai Sebagai Batal
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
