@@ -183,6 +183,25 @@ export function ResiScanScreen() {
   const warningDataRef = useRef<boolean>(false);
   // Track all codes scanned in the current scanner session to detect duplicates
   const scannedInSessionRef = useRef<Set<string>>(new Set());
+  // Live ref to cached transactions for instant zero-latency duplicate checks from cache
+  const allTransactionsRef = useRef<MarketplaceTransactionItem[]>(allTransactions);
+  useEffect(() => {
+    allTransactionsRef.current = allTransactions;
+  }, [allTransactions]);
+
+  // Preload scanned codes from cache so duplicate detection persists across scanner open/close
+  const initScannedFromCache = useCallback(() => {
+    const preloaded = new Set<string>();
+    (allTransactionsRef.current || []).forEach((t) => {
+      if (t.sudah_dicek) {
+        if (t.tracking_number) preloaded.add(t.tracking_number.trim().toUpperCase());
+        if (t.marketplace_invoice) preloaded.add(t.marketplace_invoice.trim().toUpperCase());
+        if (t.local_invoice) preloaded.add(t.local_invoice.trim().toUpperCase());
+        (t.local_invoices || []).forEach((l) => preloaded.add(l.trim().toUpperCase()));
+      }
+    });
+    scannedInSessionRef.current = preloaded;
+  }, []);
 
   useEffect(() => {
     warningDataRef.current = !!warningData;
@@ -213,19 +232,22 @@ export function ResiScanScreen() {
     syncTransactions(dateStr, false);
   }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Client-side filter applied on top of full cached dataset
-  const transactions = useMemo(() => {
-    let list = allTransactions;
-
-    // Courier filter
-    if (selectedCourier && selectedCourier !== 'all') {
-      const needle = selectedCourier.toLowerCase();
-      list = list.filter((item) => {
-        const code = (item.courier_code || '').toLowerCase();
-        const raw = (item.courier_raw || '').toLowerCase();
-        return code.includes(needle) || raw.includes(needle);
-      });
+  // Base dataset filtered by courier (used for count calculations scoped to the active courier)
+  const courierFilteredTransactions = useMemo(() => {
+    if (!selectedCourier || selectedCourier === 'all') {
+      return allTransactions;
     }
+    const needle = selectedCourier.toLowerCase();
+    return allTransactions.filter((item) => {
+      const code = (item.courier_code || '').toLowerCase();
+      const raw = (item.courier_raw || '').toLowerCase();
+      return code.includes(needle) || raw.includes(needle);
+    });
+  }, [allTransactions, selectedCourier]);
+
+  // Client-side filter applied on top of courier-filtered dataset
+  const transactions = useMemo(() => {
+    let list = courierFilteredTransactions;
 
     // Checked status filter
     if (checkStatusFilter === 'true') {
@@ -246,7 +268,7 @@ export function ResiScanScreen() {
     }
 
     return list;
-  }, [allTransactions, selectedCourier, checkStatusFilter, debouncedSearch]);
+  }, [courierFilteredTransactions, checkStatusFilter, debouncedSearch]);
 
   // Handle Mark Checked via API — optimistically updates local cache
   const { apiClient } = useConnection();
@@ -439,14 +461,54 @@ export function ResiScanScreen() {
   // Fast Barcode Scanner Processor
   const processScannedCode = useCallback(
     async (code: string) => {
-      // ── Duplicate detection (within this scanner session) ──────────────
-      if (scannedInSessionRef.current.has(code)) {
+      const cleanCode = code.trim().toUpperCase();
+
+      // ── 1. Duplicate detection: Session Memory ──────────────────────────────
+      if (scannedInSessionRef.current.has(code) || scannedInSessionRef.current.has(cleanCode)) {
         playBeepError();
         setLastScannedFeedback({
-          text: `🔁 DUPLIKAT: ${code} sudah pernah di-scan!`,
+          text: `🔁 DUPLIKAT: ${code} SUDAH PERNAH DI-SCAN!`,
           type: 'error',
         });
-        ToastAndroid.show(`Duplikat! Resi ${code} sudah di-scan.`, ToastAndroid.SHORT);
+        ToastAndroid.show(`Duplikat! Resi ${code} sudah pernah di-scan.`, ToastAndroid.SHORT);
+        setTimeout(() => {
+          isScanningLockedRef.current = false;
+        }, 1500);
+        return;
+      }
+
+      // ── 2. Duplicate detection: Local Cache (allTransactions) ───────────────
+      const currentList = allTransactionsRef.current || [];
+      const cachedItem = currentList.find((item) => {
+        const trk = (item.tracking_number || '').trim().toUpperCase();
+        const inv = (item.marketplace_invoice || '').trim().toUpperCase();
+        const loc = (item.local_invoice || '').trim().toUpperCase();
+        const locs = (item.local_invoices || []).map((l) => l.trim().toUpperCase());
+        return (
+          trk === cleanCode ||
+          inv === cleanCode ||
+          loc === cleanCode ||
+          locs.includes(cleanCode) ||
+          (cleanCode.length >= 8 && trk.includes(cleanCode))
+        );
+      });
+
+      if (cachedItem && cachedItem.sudah_dicek) {
+        playBeepError();
+        const checkedTime = cachedItem.checked_at
+          ? moment(cachedItem.checked_at).format('HH:mm')
+          : '';
+        const timeInfo = checkedTime ? ` pukul ${checkedTime}` : '';
+
+        setLastScannedFeedback({
+          text: `🔁 DUPLIKAT: ${code} SUDAH DICEK${timeInfo}!`,
+          type: 'error',
+        });
+        ToastAndroid.show(`Duplikat! Paket ini sudah pernah dicek${timeInfo}.`, ToastAndroid.SHORT);
+
+        scannedInSessionRef.current.add(code);
+        scannedInSessionRef.current.add(cleanCode);
+
         setTimeout(() => {
           isScanningLockedRef.current = false;
         }, 1500);
@@ -455,6 +517,29 @@ export function ResiScanScreen() {
 
       try {
         const result = await handleMarkChecked(code, true);
+
+        // ── 3. Duplicate detection: Server response fallback ───────────────────
+        if (result?.was_already_checked) {
+          playBeepError();
+          const prevTime = result?.previous_checked_at
+            ? moment(result.previous_checked_at).format('HH:mm')
+            : '';
+          const prevTimeMsg = prevTime ? ` pukul ${prevTime}` : '';
+
+          setLastScannedFeedback({
+            text: `🔁 DUPLIKAT: ${code} SUDAH DICEK${prevTimeMsg}!`,
+            type: 'error',
+          });
+          ToastAndroid.show(`Duplikat! Paket ini sudah dicek sebelumnya${prevTimeMsg}.`, ToastAndroid.SHORT);
+
+          scannedInSessionRef.current.add(code);
+          scannedInSessionRef.current.add(cleanCode);
+
+          setTimeout(() => {
+            isScanningLockedRef.current = false;
+          }, 1500);
+          return;
+        }
 
         if (result?.is_warning) {
           // LOUD ERROR BUZZER
@@ -607,11 +692,11 @@ export function ResiScanScreen() {
     },
   });
 
-  // Counts derived from FULL unfiltered dataset — stable regardless of active filter tab
-  const totalCount = allTransactions.length;
+  // Counts derived from courier-filtered dataset — reflects active courier filter while stable across status tabs
+  const totalCount = courierFilteredTransactions.length;
   const checkedCount = useMemo(
-    () => allTransactions.filter((t) => t.sudah_dicek).length,
-    [allTransactions]
+    () => courierFilteredTransactions.filter((t) => t.sudah_dicek).length,
+    [courierFilteredTransactions]
   );
   const uncheckedCount = totalCount - checkedCount;
 
@@ -1009,8 +1094,8 @@ export function ResiScanScreen() {
             if (!hasPermission) {
               requestPermission().then((res) => {
                 if (res) {
-                  // Fresh session — clear duplicate tracking & feedback
-                  scannedInSessionRef.current = new Set();
+                  // Preload duplicate memory directly from cached transactions
+                  initScannedFromCache();
                   setLastScannedFeedback(null);
                   isScanningLockedRef.current = false;
                   setIsScannerOpen(true);
@@ -1018,8 +1103,8 @@ export function ResiScanScreen() {
                 else Alert.alert('Izin Kamera', 'Izin kamera dibutuhkan untuk memindai resi.');
               });
             } else {
-              // Fresh session — clear duplicate tracking & feedback
-              scannedInSessionRef.current = new Set();
+              // Preload duplicate memory directly from cached transactions
+              initScannedFromCache();
               setLastScannedFeedback(null);
               isScanningLockedRef.current = false;
               setIsScannerOpen(true);
@@ -1041,7 +1126,6 @@ export function ResiScanScreen() {
         animationType="slide"
         transparent={false}
         onRequestClose={() => {
-          scannedInSessionRef.current = new Set();
           setIsScannerOpen(false);
         }}
       >
@@ -1080,7 +1164,6 @@ export function ResiScanScreen() {
             <View className="flex-row items-center justify-between px-5">
               <TouchableOpacity
                 onPress={() => {
-                  scannedInSessionRef.current = new Set();
                   setLastScannedFeedback(null);
                   setIsScannerOpen(false);
                 }}
