@@ -38,6 +38,7 @@ import {
   ChevronRight,
   Info,
   AlertCircle,
+  Zap,
 } from 'lucide-react-native';
 import { useConnection } from '../../hooks/use-connection';
 import { useResiScanCache } from '../../hooks/use-resi-scan-cache';
@@ -108,6 +109,31 @@ const COMMON_COURIERS = [
   { label: 'GoSend', value: 'gosend' },
 ];
 
+export const isInstantCourier = (
+  courierCode?: string | null,
+  courierRaw?: string | null
+): boolean => {
+  const normalize = (c: string | null | undefined) =>
+    String(c || '').toLowerCase().trim();
+
+  const instantKeywords = [
+    'instant',
+    'sameday',
+    'same day',
+    'gojek',
+    'grab',
+    'gosend',
+    'grabexpress',
+    'shopee instant',
+    'spx instant',
+  ];
+
+  return [courierCode, courierRaw].some((c) => {
+    const val = normalize(c);
+    return instantKeywords.some((kw) => val.includes(kw));
+  });
+};
+
 export const isUnsupportedTrackingCourier = (
   courierCode?: string | null,
   courierRaw?: string | null
@@ -139,6 +165,7 @@ export function ResiScanScreen() {
   // Filters state (all applied client-side)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedCourier, setSelectedCourier] = useState<string>('all');
+  const [includeInstant, setIncludeInstant] = useState<boolean>(false);
   const [checkStatusFilter, setCheckStatusFilter] = useState<'false' | 'true' | 'all'>('false');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
@@ -232,18 +259,29 @@ export function ResiScanScreen() {
     syncTransactions(dateStr, false);
   }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Base dataset filtered by courier (used for count calculations scoped to the active courier)
+  // Base dataset filtered by courier and instant exclusion (used for count calculations scoped to the active courier)
   const courierFilteredTransactions = useMemo(() => {
-    if (!selectedCourier || selectedCourier === 'all') {
-      return allTransactions;
+    let list = allTransactions;
+
+    // Exclude instant courier by default (unless includeInstant is true)
+    if (!includeInstant) {
+      list = list.filter(
+        (item) => !isInstantCourier(item.courier_code, item.courier_raw)
+      );
     }
-    const needle = selectedCourier.toLowerCase();
-    return allTransactions.filter((item) => {
-      const code = (item.courier_code || '').toLowerCase();
-      const raw = (item.courier_raw || '').toLowerCase();
-      return code.includes(needle) || raw.includes(needle);
-    });
-  }, [allTransactions, selectedCourier]);
+
+    // Filter by selected courier
+    if (selectedCourier && selectedCourier !== 'all') {
+      const needle = selectedCourier.toLowerCase();
+      list = list.filter((item) => {
+        const code = (item.courier_code || '').toLowerCase();
+        const raw = (item.courier_raw || '').toLowerCase();
+        return code.includes(needle) || raw.includes(needle);
+      });
+    }
+
+    return list;
+  }, [allTransactions, selectedCourier, includeInstant]);
 
   // Client-side filter applied on top of courier-filtered dataset
   const transactions = useMemo(() => {
@@ -477,9 +515,9 @@ export function ResiScanScreen() {
         return;
       }
 
-      // ── 2. Duplicate detection: Local Cache (allTransactions) ───────────────
+      // ── 2. Find matching transaction in current date dataset ─────────────────
       const currentList = allTransactionsRef.current || [];
-      const cachedItem = currentList.find((item) => {
+      const matchedItem = currentList.find((item) => {
         const trk = (item.tracking_number || '').trim().toUpperCase();
         const inv = (item.marketplace_invoice || '').trim().toUpperCase();
         const loc = (item.local_invoice || '').trim().toUpperCase();
@@ -493,10 +531,90 @@ export function ResiScanScreen() {
         );
       });
 
-      if (cachedItem && cachedItem.sudah_dicek) {
+      // ── 2a. Reject if NOT FOUND in active date ──────────────────────────────
+      if (!matchedItem) {
         playBeepError();
-        const checkedTime = cachedItem.checked_at
-          ? moment(cachedItem.checked_at).format('HH:mm')
+        const dateText = moment(selectedDate).format('DD/MM/YYYY');
+        setLastScannedFeedback({
+          text: `❌ [${code}] TIDAK ADA PADA TGL ${dateText}!`,
+          type: 'error',
+        });
+        ToastAndroid.show(`Ditolak! Resi '${code}' tidak ditemukan pada tanggal ${dateText}.`, ToastAndroid.LONG);
+        setTimeout(() => {
+          isScanningLockedRef.current = false;
+        }, 1500);
+        return;
+      }
+
+      // ── 2b. Reject Instant Courier if instant filter is OFF (default false) ──
+      if (!includeInstant && isInstantCourier(matchedItem.courier_code, matchedItem.courier_raw)) {
+        playBeepError();
+        const courierLabel = (matchedItem.courier_raw || matchedItem.courier_code || 'Instan').toUpperCase();
+        setLastScannedFeedback({
+          text: `⛔ DITOLAK: KURIR INSTAN (${courierLabel})`,
+          type: 'error',
+        });
+        ToastAndroid.show(`Ditolak! Resi ${code} adalah pengiriman instan (${courierLabel}).`, ToastAndroid.LONG);
+        setTimeout(() => {
+          isScanningLockedRef.current = false;
+        }, 1500);
+        return;
+      }
+
+      // ── 2c. Reject if Courier does not match active Courier Filter ───────────
+      if (selectedCourier && selectedCourier !== 'all') {
+        const needle = selectedCourier.toLowerCase().trim();
+        const itemCode = (matchedItem.courier_code || '').toLowerCase().trim();
+        const itemRaw = (matchedItem.courier_raw || '').toLowerCase().trim();
+        const isMatch = itemCode.includes(needle) || itemRaw.includes(needle);
+
+        if (!isMatch) {
+          playBeepError();
+          const actualCourier = (matchedItem.courier_raw || matchedItem.courier_code || 'Kurir Lain').toUpperCase();
+          const allowedCourier = (COMMON_COURIERS.find((c) => c.value === selectedCourier)?.label || selectedCourier).toUpperCase();
+
+          setLastScannedFeedback({
+            text: `🚫 BUKAN ${allowedCourier}! (Terdeteksi: ${actualCourier})`,
+            type: 'error',
+          });
+          ToastAndroid.show(`Ditolak! Resi ini adalah ${actualCourier}, sesi ini hanya untuk ${allowedCourier}!`, ToastAndroid.LONG);
+          setTimeout(() => {
+            isScanningLockedRef.current = false;
+          }, 1500);
+          return;
+        }
+      }
+
+      // ── 2d. Reject if Cancelled / Batal ─────────────────────────────────────
+      const statusLower = (matchedItem.status || '').toLowerCase().trim();
+      if (['cancelled', 'cancel', 'batal', 'returned', 'retur'].includes(statusLower)) {
+        playBeepError();
+        setWarningData({
+          title: 'PERINGATAN: JANGAN KIRIM PAKET!',
+          message: 'Transaksi ini berstatus CANCELLED / BATAL di marketplace! JANGAN serahkan paket ke kurir!',
+          trackingNumber: matchedItem.tracking_number || code,
+          invoice: matchedItem.marketplace_invoice || matchedItem.local_invoice,
+          courier: matchedItem.courier_raw || matchedItem.courier_code,
+          status: matchedItem.status,
+          trackingStatus: matchedItem.tracking_status,
+        });
+        setLastScannedFeedback({
+          text: `⚠️ [${code}] CANCELLED / BATAL!`,
+          type: 'warning',
+        });
+        scannedInSessionRef.current.add(code);
+        scannedInSessionRef.current.add(cleanCode);
+        setTimeout(() => {
+          isScanningLockedRef.current = false;
+        }, 1500);
+        return;
+      }
+
+      // ── 2e. Reject if Already Checked (Duplicate in Cache) ───────────────────
+      if (matchedItem.sudah_dicek) {
+        playBeepError();
+        const checkedTime = matchedItem.checked_at
+          ? moment(matchedItem.checked_at).format('HH:mm')
           : '';
         const timeInfo = checkedTime ? ` pukul ${checkedTime}` : '';
 
@@ -596,8 +714,14 @@ export function ResiScanScreen() {
         }, 1200);
       }
     },
-    [handleMarkChecked]
+    [handleMarkChecked, selectedCourier, selectedDate, includeInstant]
   );
+
+  // Live ref for camera callback to always call latest processScannedCode without recreating codeScanner
+  const processScannedCodeRef = useRef(processScannedCode);
+  useEffect(() => {
+    processScannedCodeRef.current = processScannedCode;
+  }, [processScannedCode]);
 
   // Quick Cancel Submit Handler
   const handleQuickCancelSubmit = useCallback(async () => {
@@ -687,7 +811,7 @@ export function ResiScanScreen() {
 
       // Execute safely detached from camera frame thread
       setTimeout(() => {
-        processScannedCode(firstCode);
+        processScannedCodeRef.current(firstCode);
       }, 50);
     },
   });
@@ -964,6 +1088,44 @@ export function ResiScanScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Sub-row: Instant Courier Toggle & Quick Courier Reset */}
+        <View className="flex-row items-center justify-between mb-2.5">
+          {/* Instant Courier Filter Toggle (default: false / Exclude Instan) */}
+          <TouchableOpacity
+            onPress={() => setIncludeInstant((prev) => !prev)}
+            activeOpacity={0.7}
+            className={cn(
+              'flex-row items-center px-2.5 py-1.5 rounded-lg border',
+              includeInstant
+                ? 'bg-amber-500/15 border-amber-500/40'
+                : 'bg-secondary/40 border-border'
+            )}
+          >
+            <Zap size={14} color={includeInstant ? '#f59e0b' : colors.mutedForeground} />
+            <Text
+              className={cn(
+                'text-xs font-semibold ml-1.5',
+                includeInstant ? 'text-amber-500 font-bold' : 'text-muted-foreground'
+              )}
+            >
+              {includeInstant ? 'Sertakan Instan (ON)' : 'Exclude Instan (OFF)'}
+            </Text>
+          </TouchableOpacity>
+
+          {selectedCourier !== 'all' ? (
+            <TouchableOpacity
+              onPress={() => setSelectedCourier('all')}
+              activeOpacity={0.7}
+              className="flex-row items-center bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-md"
+            >
+              <Text className="text-[11px] font-bold text-primary mr-1">
+                {COMMON_COURIERS.find((c) => c.value === selectedCourier)?.label || selectedCourier}
+              </Text>
+              <X size={12} color={colors.primary} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
         {/* Search Input */}
         <View className="relative mb-2.5">
           <Input
@@ -1190,6 +1352,29 @@ export function ResiScanScreen() {
                   color={torchEnabled ? '#000000' : '#ffffff'}
                 />
               </TouchableOpacity>
+            </View>
+
+            {/* Active Session Filter Info Badge */}
+            <View className="items-center px-4 -mt-3">
+              <View className="bg-black/75 border border-white/20 px-3 py-1 rounded-full flex-row items-center gap-2">
+                <Truck size={12} color="#60a5fa" />
+                <Text className="text-white text-[11px] font-extrabold">
+                  {selectedCourier !== 'all'
+                    ? (COMMON_COURIERS.find((c) => c.value === selectedCourier)?.label || selectedCourier.toUpperCase())
+                    : 'Semua Kurir'}
+                </Text>
+                <Text className="text-white/40 text-[10px]">|</Text>
+                <Text className="text-white/80 text-[11px]">
+                  {moment(selectedDate).format('DD MMM YYYY')}
+                </Text>
+                <Text className="text-white/40 text-[10px]">|</Text>
+                <View className="flex-row items-center">
+                  <Zap size={11} color={includeInstant ? '#f59e0b' : '#9ca3af'} />
+                  <Text className={cn('text-[10px] ml-0.5 font-bold', includeInstant ? 'text-amber-400' : 'text-gray-400')}>
+                    {includeInstant ? '+Instan' : 'No Instan'}
+                  </Text>
+                </View>
+              </View>
             </View>
 
             {/* Viewfinder Target Reticle */}
