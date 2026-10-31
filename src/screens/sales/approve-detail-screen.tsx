@@ -99,6 +99,12 @@ export function ApproveDetailScreen({ navigation, route }: any) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [historyProductName, setHistoryProductName] = useState('');
+  const [historyPKey, setHistoryPKey] = useState('');
+  const [historyTab, setHistoryTab] = useState<'customer' | 'all'>('customer');
+  const [allHistoryData, setAllHistoryData] = useState<any[]>([]);
+  const [allHistoryLoading, setAllHistoryLoading] = useState(false);
+  const [allHistoryPage, setAllHistoryPage] = useState(1);
+  const [allHistoryHasMore, setAllHistoryHasMore] = useState(false);
 
   // Reanimated Shared Values
   const translateX = useSharedValue(0);
@@ -345,6 +351,29 @@ export function ApproveDetailScreen({ navigation, route }: any) {
     ],
   }));
 
+  const fetchAllHistory = async (pkey: string, page = 1, append = false) => {
+    if (!pkey) return;
+    setAllHistoryLoading(true);
+    try {
+      const response = await apiClient.get('api/bridge/product_sales_history', {
+        params: { productId: pkey, page, per_page: 20 },
+      });
+      const items = response.data?.data || [];
+      const total = response.data?.total || 0;
+      setAllHistoryData(prev => (append ? [...prev, ...items] : items));
+      setAllHistoryPage(page);
+      setAllHistoryHasMore(page * 20 < total);
+    } catch (e) {
+      ToastAndroid.show(
+        t('approve.salesApprove.failedLoadHistory') || 'Gagal memuat histori produk',
+        ToastAndroid.SHORT,
+      );
+      if (!append) setAllHistoryData([]);
+    } finally {
+      setAllHistoryLoading(false);
+    }
+  };
+
   const fetchHistory = async (
     pkey: string,
     accloc: string,
@@ -352,14 +381,17 @@ export function ApproveDetailScreen({ navigation, route }: any) {
     productName: string,
   ) => {
     setHistoryData([]);
+    setAllHistoryData([]);
     setHistoryProductName(productName);
+    setHistoryPKey(pkey);
+    setHistoryTab('customer');
     setHistoryLoading(true);
     setHistoryModalVisible(true);
     try {
       const response = await apiClient.get('api/bridge/history_product', {
         params: { pkey, accloc, customer },
       });
-      setHistoryData(response.data);
+      setHistoryData(Array.isArray(response.data) ? response.data : []);
     } catch (e) {
       ToastAndroid.show(
         t('approve.salesApprove.failedLoadHistory'),
@@ -855,7 +887,7 @@ export function ApproveDetailScreen({ navigation, route }: any) {
       {/* History Modal */}
       <Modal visible={historyModalVisible} transparent animationType="slide">
         <View className="flex-1 justify-end bg-black/80">
-          <View className="bg-card h-[80%] rounded-t-[40px] overflow-hidden">
+          <View className="bg-card h-[85%] rounded-t-[40px] overflow-hidden">
             <View className="p-6 border-b border-border/30 flex-row justify-between items-center bg-secondary/5">
               <View className="flex-1">
                 <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest leading-[8px]">
@@ -875,77 +907,242 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                 <X size={20} color={colors.foreground} />
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={historyData}
-              ListHeaderComponent={
-                <View className="flex-row items-center py-2 border-b border-border/10 px-2 bg-secondary/5">
-                  <Text className="flex-[1] text-[8px] font-black text-muted-foreground uppercase">
-                    {t('element.date')}
-                  </Text>
-                  <Text className="flex-[0.7] text-[8px] font-black text-muted-foreground uppercase text-center">
-                    {t('element.qty')}
-                  </Text>
-                  <Text className="flex-[1.2] text-[8px] font-black text-muted-foreground uppercase text-right">
-                    {t('element.price')}
-                  </Text>
-                  <Text className="flex-[1] text-[8px] font-black text-muted-foreground uppercase text-right">
-                    {t('element.discount')}
-                  </Text>
-                  <Text className="flex-[1.3] text-[8px] font-black text-muted-foreground uppercase text-right">
-                    {t('element.total')}
-                  </Text>
-                </View>
-              }
-              contentContainerStyle={{ paddingBottom: 20 }}
-              keyExtractor={(item, idx) => idx.toString()}
-              renderItem={({ item }) => (
-                <View className="flex-row items-center py-3 border-b border-border/5 px-2">
-                  <Text className="flex-[1] text-[9px] font-black text-muted-foreground">
-                    {dateFormatted(item.DateTr)}
-                  </Text>
-                  <View className="flex-[0.7] items-center">
-                    <Text className="text-[9px] font-black text-foreground">
-                      {numberWithComma(item.CQty)}
+
+            {/* Tabs Header */}
+            <View className="flex-row border-b border-border/10 bg-secondary/5 px-4 pt-2">
+              <TouchableOpacity
+                onPress={() => setHistoryTab('customer')}
+                className={cn(
+                  'flex-1 py-2.5 items-center border-b-2',
+                  historyTab === 'customer'
+                    ? 'border-primary'
+                    : 'border-transparent opacity-60'
+                )}
+              >
+                <Text
+                  className={cn(
+                    'text-[10px] font-black uppercase tracking-wider',
+                    historyTab === 'customer' ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                  numberOfLines={1}
+                >
+                  {targetContact || 'Pelanggan Ini'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setHistoryTab('all');
+                  if (allHistoryData.length === 0 && !allHistoryLoading) {
+                    fetchAllHistory(historyPKey, 1);
+                  }
+                }}
+                className={cn(
+                  'flex-1 py-2.5 items-center border-b-2',
+                  historyTab === 'all'
+                    ? 'border-primary'
+                    : 'border-transparent opacity-60'
+                )}
+              >
+                <Text
+                  className={cn(
+                    'text-[10px] font-black uppercase tracking-wider',
+                    historyTab === 'all' ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                >
+                  Semua Pelanggan
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {historyTab === 'customer' ? (
+              <FlatList
+                data={historyData}
+                ListHeaderComponent={
+                  <View className="flex-row items-center py-2 border-b border-border/10 px-3 bg-secondary/5">
+                    <Text className="flex-[1] text-[8px] font-black text-muted-foreground uppercase">
+                      {t('element.date')}
                     </Text>
-                    <Text className="text-[7px] text-muted-foreground font-black uppercase">
-                      {item.Unit}
+                    <Text className="w-10 text-[8px] font-black text-muted-foreground uppercase text-center">
+                      Status
+                    </Text>
+                    <Text className="flex-[0.7] text-[8px] font-black text-muted-foreground uppercase text-center">
+                      {t('element.qty')}
+                    </Text>
+                    <Text className="flex-[1.1] text-[8px] font-black text-muted-foreground uppercase text-right">
+                      {t('element.price')}
+                    </Text>
+                    <Text className="flex-[0.9] text-[8px] font-black text-muted-foreground uppercase text-right">
+                      {t('element.discount')}
+                    </Text>
+                    <Text className="flex-[1.2] text-[8px] font-black text-muted-foreground uppercase text-right">
+                      {t('element.total')}
                     </Text>
                   </View>
-                  <Text className="flex-[1.2] text-[9px] font-black text-blue-600 text-right">
-                    {numberWithComma(item.Price)}
-                  </Text>
-                  <Text
-                    className="flex-[1] text-[9px] font-black text-right"
-                    style={{
-                      color: item.Discount > 0 ? colors.red : colors.green,
-                    }}
-                  >
-                    {numberWithComma(item.Discount)}
-                  </Text>
-                  <Text className="flex-[1.3] text-[10px] font-black text-foreground text-right">
-                    {numberWithComma(item.Amount)}
-                  </Text>
-                </View>
-              )}
-              ListEmptyComponent={
-                historyLoading ? (
-                  <View className="py-20 items-center">
-                    <ActivityIndicator color={colors.primary} />
-                  </View>
-                ) : (
-                  <View className="py-20 items-center">
-                    <Text className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                      {t('approve.salesApprove.noHistory')}
+                }
+                contentContainerStyle={{ paddingBottom: 20 }}
+                keyExtractor={(item, idx) => idx.toString()}
+                renderItem={({ item }) => (
+                  <View className="flex-row items-center py-3 border-b border-border/5 px-3">
+                    <Text className="flex-[1] text-[9px] font-black text-muted-foreground">
+                      {dateFormatted(item.DateTr)}
+                    </Text>
+                    <View className="w-10 items-center">
+                      {item.Status ? (
+                        <View
+                          className={cn(
+                            'px-1.5 py-0.5 rounded border',
+                            item.Status === 'OP'
+                              ? 'border-amber-500/40 bg-amber-500/10'
+                              : 'border-emerald-500/40 bg-emerald-500/10'
+                          )}
+                        >
+                          <Text
+                            className={cn(
+                              'text-[7px] font-black',
+                              item.Status === 'OP' ? 'text-amber-500' : 'text-emerald-500'
+                            )}
+                          >
+                            {item.Status}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View className="flex-[0.7] items-center">
+                      <Text className="text-[9px] font-black text-foreground">
+                        {numberWithComma(item.CQty)}
+                      </Text>
+                      <Text className="text-[7px] text-muted-foreground font-black uppercase">
+                        {item.Unit}
+                      </Text>
+                    </View>
+                    <Text className="flex-[1.1] text-[9px] font-black text-blue-600 text-right">
+                      {numberWithComma(item.Price)}
+                    </Text>
+                    <Text
+                      className="flex-[0.9] text-[9px] font-black text-right"
+                      style={{
+                        color: item.Discount > 0 ? colors.red : colors.green,
+                      }}
+                    >
+                      {numberWithComma(item.Discount)}
+                    </Text>
+                    <Text className="flex-[1.2] text-[10px] font-black text-foreground text-right">
+                      {numberWithComma(item.Amount)}
                     </Text>
                   </View>
-                )
-              }
-            />
-            <View className="p-6 bg-card border-t border-border/10">
+                )}
+                ListEmptyComponent={
+                  historyLoading ? (
+                    <View className="py-20 items-center">
+                      <ActivityIndicator color={colors.primary} />
+                    </View>
+                  ) : (
+                    <View className="py-20 items-center">
+                      <Text className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                        {t('approve.salesApprove.noHistory')}
+                      </Text>
+                    </View>
+                  )
+                }
+              />
+            ) : (
+              <FlatList
+                data={allHistoryData}
+                ListHeaderComponent={
+                  <View className="flex-row items-center py-2 border-b border-border/10 px-3 bg-secondary/5">
+                    <Text className="w-16 text-[8px] font-black text-muted-foreground uppercase">
+                      {t('element.date')}
+                    </Text>
+                    <Text className="flex-1 text-[8px] font-black text-muted-foreground uppercase">
+                      Pelanggan
+                    </Text>
+                    <Text className="w-8 text-[8px] font-black text-muted-foreground uppercase text-center">
+                      St
+                    </Text>
+                    <Text className="w-10 text-[8px] font-black text-muted-foreground uppercase text-center">
+                      {t('element.qty')}
+                    </Text>
+                    <Text className="w-16 text-[8px] font-black text-muted-foreground uppercase text-right">
+                      {t('element.price')}
+                    </Text>
+                    <Text className="w-16 text-[8px] font-black text-muted-foreground uppercase text-right">
+                      {t('element.total')}
+                    </Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingBottom: 20 }}
+                keyExtractor={(item, idx) => idx.toString()}
+                onEndReached={() => {
+                  if (allHistoryHasMore && !allHistoryLoading) {
+                    fetchAllHistory(historyPKey, allHistoryPage + 1, true);
+                  }
+                }}
+                onEndReachedThreshold={0.3}
+                renderItem={({ item }) => (
+                  <View className="flex-row items-center py-3 border-b border-border/5 px-3">
+                    <Text className="w-16 text-[8px] font-black text-muted-foreground">
+                      {dateFormatted(item.date)}
+                    </Text>
+                    <Text
+                      className="flex-1 text-[9px] font-black text-foreground mr-1"
+                      numberOfLines={1}
+                    >
+                      {item.customer_name}
+                    </Text>
+                    <View className="w-8 items-center">
+                      {item.status ? (
+                        <View
+                          className={cn(
+                            'px-1 py-0.5 rounded border',
+                            item.status === 'OP'
+                              ? 'border-amber-500/40 bg-amber-500/10'
+                              : 'border-emerald-500/40 bg-emerald-500/10'
+                          )}
+                        >
+                          <Text
+                            className={cn(
+                              'text-[6.5px] font-black',
+                              item.status === 'OP' ? 'text-amber-500' : 'text-emerald-500'
+                            )}
+                          >
+                            {item.status}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text className="w-10 text-[9px] font-black text-primary text-center">
+                      {numberWithComma(item.qty)}
+                    </Text>
+                    <Text className="w-16 text-[9px] font-black text-foreground text-right">
+                      {numberWithComma(item.price)}
+                    </Text>
+                    <Text className="w-16 text-[9px] font-black text-foreground text-right">
+                      {numberWithComma(item.total)}
+                    </Text>
+                  </View>
+                )}
+                ListEmptyComponent={
+                  allHistoryLoading ? (
+                    <View className="py-20 items-center">
+                      <ActivityIndicator color={colors.primary} />
+                    </View>
+                  ) : (
+                    <View className="py-20 items-center">
+                      <Text className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                        {t('approve.salesApprove.noHistory')}
+                      </Text>
+                    </View>
+                  )
+                }
+              />
+            )}
+
+            <View className="p-4 bg-card border-t border-border/10">
               <Button
                 label={t('element.close')}
                 onPress={() => setHistoryModalVisible(false)}
-                className="h-12 rounded-2xl"
+                className="h-11 rounded-2xl"
               />
             </View>
           </View>
