@@ -33,6 +33,7 @@ import { ApproveDetailScreen } from './src/screens/sales/approve-detail-screen';
 import { CancelTransactionScreen } from './src/screens/sales/cancel-transaction-screen';
 import { SalesReportScreen } from './src/screens/sales/sales-report-screen';
 import { PurchaseScreen } from './src/screens/purchase/purchase-screen';
+import { PriceRequestApproveScreen } from './src/screens/purchase/price-request-approve-screen';
 import { SalesReturnScreen } from './src/screens/sales/sales-return-screen';
 import { DebtPaymentsScreen } from './src/screens/payment/debt-payments-screen';
 import { CreditPaymentsScreen } from './src/screens/payment/credit-payments-screen';
@@ -127,6 +128,10 @@ export default function App() {
                           component={SalesReportScreen}
                         />
                         <Stack.Screen name="Purchase" component={PurchaseScreen} />
+                        <Stack.Screen
+                          name="PriceRequestApprove"
+                          component={PriceRequestApproveScreen}
+                        />
                         <Stack.Screen
                           name="SalesReturn"
                           component={SalesReturnScreen}

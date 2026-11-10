@@ -16,6 +16,7 @@ import {
   CreditCard,
   ArrowRight,
   ShoppingCart,
+  Tag,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeColor } from '../../lib/colors';
@@ -86,6 +87,15 @@ export function SalesScreen() {
       bgColor: 'bg-primary/10 dark:bg-primary/20',
       route: 'SalesOrder',
       permission: 'sales-order',
+    },
+    {
+      title: 'Persetujuan Harga',
+      description: 'Persetujuan pengajuan harga produk',
+      icon: Tag,
+      color: colors.indigo,
+      bgColor: 'bg-indigo-500/10 dark:bg-indigo-400/20',
+      route: 'PriceRequestApprove',
+      permission: 'price-request-approve',
     },
   ].filter(item => !item.permission || hasPermission(item.permission));
 
