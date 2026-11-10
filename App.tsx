@@ -37,6 +37,8 @@ import { PriceRequestApproveScreen } from './src/screens/purchase/price-request-
 import { SalesReturnScreen } from './src/screens/sales/sales-return-screen';
 import { DebtPaymentsScreen } from './src/screens/payment/debt-payments-screen';
 import { CreditPaymentsScreen } from './src/screens/payment/credit-payments-screen';
+import { PelunasanPiutangScreen } from './src/screens/payment/pelunasan-piutang-screen';
+import { PelunasanHutangScreen } from './src/screens/payment/pelunasan-hutang-screen';
 import { ServerConfigurationScreen } from './src/screens/auth/server-configuration-screen';
 import { StockOpnameListScreen } from './src/screens/main/stock-opname-list-screen';
 import { AttendanceScreen } from './src/screens/main/attendance-screen';
@@ -147,6 +149,14 @@ export default function App() {
                         <Stack.Screen
                           name="CreditPayments"
                           component={CreditPaymentsScreen}
+                        />
+                        <Stack.Screen
+                          name="PelunasanPiutang"
+                          component={PelunasanPiutangScreen}
+                        />
+                        <Stack.Screen
+                          name="PelunasanHutang"
+                          component={PelunasanHutangScreen}
                         />
                         <Stack.Screen
                           name="Attendance"

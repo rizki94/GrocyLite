@@ -74,12 +74,15 @@ export function MainTabNavigator() {
     'sales-return-list',
     'sales-omzet-report',
     'sales-order',
+    'price-request-approve',
   ];
 
   const financePermissions = [
     'payment-ar-list',
     'payment-ap-list',
     'purchase-report',
+    '4pilar-pelunasan-piutang',
+    '4pilar-pelunasan-hutang',
   ];
 
   const warehousePermissions = ['stock-opname-list', 'product-stock-list'];

@@ -12,6 +12,8 @@ import {
   FileText,
   RotateCcw,
   ArrowRight,
+  Receipt,
+  CheckCircle2,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeColor } from '../../lib/colors';
@@ -39,13 +41,22 @@ export function FinanceScreen() {
 
   const menuItems = [
     {
-      title: t('finance.accountPayableReport'),
-      description: t('finance.accountPayableReport'),
-      icon: Wallet,
-      color: colors.indigo,
-      bgColor: 'bg-indigo-500/10 dark:bg-indigo-400/20',
-      route: 'DebtPayments',
-      permission: 'payment-ap-list',
+      title: 'Pelunasan Piutang',
+      description: 'Input pelunasan faktur & retur piutang customer',
+      icon: CheckCircle2,
+      color: colors.green,
+      bgColor: 'bg-green-500/10 dark:bg-green-400/20',
+      route: 'PelunasanPiutang',
+      permission: ['4pilar-pelunasan-piutang', 'payment-ar-list'],
+    },
+    {
+      title: 'Pelunasan Hutang',
+      description: 'Input pelunasan faktur & retur hutang supplier',
+      icon: Receipt,
+      color: colors.amber,
+      bgColor: 'bg-amber-500/10 dark:bg-amber-400/20',
+      route: 'PelunasanHutang',
+      permission: ['4pilar-pelunasan-hutang', 'payment-ap-list'],
     },
     {
       title: t('finance.accountReceivableReport'),
@@ -55,6 +66,15 @@ export function FinanceScreen() {
       bgColor: 'bg-primary/10 dark:bg-primary/20',
       route: 'CreditPayments',
       permission: 'payment-ar-list',
+    },
+    {
+      title: t('finance.accountPayableReport'),
+      description: t('finance.accountPayableReport'),
+      icon: Wallet,
+      color: colors.indigo,
+      bgColor: 'bg-indigo-500/10 dark:bg-indigo-400/20',
+      route: 'DebtPayments',
+      permission: 'payment-ap-list',
     },
     {
       title: t('dashboard.purchaseReport'),
