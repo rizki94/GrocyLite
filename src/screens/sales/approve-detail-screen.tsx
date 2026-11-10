@@ -358,16 +358,22 @@ export function ApproveDetailScreen({ navigation, route }: any) {
       const response = await apiClient.get('api/bridge/product_sales_history', {
         params: { productId: pkey, page, per_page: 20 },
       });
-      const items = response.data?.data || [];
-      const total = response.data?.total || 0;
+      const items = Array.isArray(response.data?.data)
+        ? response.data.data
+        : Array.isArray(response.data)
+        ? response.data
+        : [];
+      const total = response.data?.total || items.length;
       setAllHistoryData(prev => (append ? [...prev, ...items] : items));
       setAllHistoryPage(page);
       setAllHistoryHasMore(page * 20 < total);
     } catch (e) {
-      ToastAndroid.show(
-        t('approve.salesApprove.failedLoadHistory') || 'Gagal memuat histori produk',
-        ToastAndroid.SHORT,
-      );
+      if (Platform.OS === 'android') {
+        ToastAndroid.show(
+          t('approve.salesApprove.failedLoadHistory') || 'Gagal memuat histori produk',
+          ToastAndroid.SHORT,
+        );
+      }
       if (!append) setAllHistoryData([]);
     } finally {
       setAllHistoryLoading(false);
@@ -391,12 +397,19 @@ export function ApproveDetailScreen({ navigation, route }: any) {
       const response = await apiClient.get('api/bridge/history_product', {
         params: { pkey, accloc, customer },
       });
-      setHistoryData(Array.isArray(response.data) ? response.data : []);
+      const data = Array.isArray(response.data)
+        ? response.data
+        : Array.isArray(response.data?.data)
+        ? response.data.data
+        : [];
+      setHistoryData(data);
     } catch (e) {
-      ToastAndroid.show(
-        t('approve.salesApprove.failedLoadHistory'),
-        ToastAndroid.SHORT,
-      );
+      if (Platform.OS === 'android') {
+        ToastAndroid.show(
+          t('approve.salesApprove.failedLoadHistory') || 'Gagal memuat histori produk',
+          ToastAndroid.SHORT,
+        );
+      }
       setHistoryData([]);
     } finally {
       setHistoryLoading(false);
@@ -885,12 +898,17 @@ export function ApproveDetailScreen({ navigation, route }: any) {
       </GestureDetector>
 
       {/* History Modal */}
-      <Modal visible={historyModalVisible} transparent animationType="slide">
+      <Modal
+        visible={historyModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setHistoryModalVisible(false)}
+      >
         <View className="flex-1 justify-end bg-black/80">
           <View className="bg-card h-[85%] rounded-t-[40px] overflow-hidden">
             <View className="p-6 border-b border-border/30 flex-row justify-between items-center bg-secondary/5">
               <View className="flex-1">
-                <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest leading-[8px]">
+                <Text className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">
                   {t('approve.salesApprove.transactionHistory')}
                 </Text>
                 <Text
@@ -1022,7 +1040,7 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                     <Text
                       className="flex-[0.9] text-[9px] font-black text-right"
                       style={{
-                        color: item.Discount > 0 ? colors.red : colors.green,
+                        color: Number(item.Discount || 0) > 0 ? colors.red : colors.green,
                       }}
                     >
                       {numberWithComma(item.Discount)}
