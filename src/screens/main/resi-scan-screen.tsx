@@ -166,6 +166,7 @@ export function ResiScanScreen() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedCourier, setSelectedCourier] = useState<string>('all');
   const [includeInstant, setIncludeInstant] = useState<boolean>(false);
+  const [resiFilter, setResiFilter] = useState<'all' | 'has_resi' | 'no_resi'>('all');
   const [checkStatusFilter, setCheckStatusFilter] = useState<'false' | 'true' | 'all'>('false');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
@@ -283,9 +284,33 @@ export function ResiScanScreen() {
     return list;
   }, [allTransactions, selectedCourier, includeInstant]);
 
-  // Client-side filter applied on top of courier-filtered dataset
+  // Count stats for resi filter (scoped to active courier & instant selection)
+  const resiCounts = useMemo(() => {
+    const hasResi = courierFilteredTransactions.filter(
+      (t) => !!t.tracking_number && t.tracking_number.trim() !== ''
+    ).length;
+    const noResi = courierFilteredTransactions.length - hasResi;
+    return { all: courierFilteredTransactions.length, hasResi, noResi };
+  }, [courierFilteredTransactions]);
+
+  // Base dataset filtered by courier, instant exclusion, and resi presence
+  const baseTransactions = useMemo(() => {
+    if (resiFilter === 'has_resi') {
+      return courierFilteredTransactions.filter(
+        (item) => !!item.tracking_number && item.tracking_number.trim() !== ''
+      );
+    }
+    if (resiFilter === 'no_resi') {
+      return courierFilteredTransactions.filter(
+        (item) => !item.tracking_number || item.tracking_number.trim() === ''
+      );
+    }
+    return courierFilteredTransactions;
+  }, [courierFilteredTransactions, resiFilter]);
+
+  // Client-side filter applied on top of baseTransactions dataset
   const transactions = useMemo(() => {
-    let list = courierFilteredTransactions;
+    let list = baseTransactions;
 
     // Checked status filter
     if (checkStatusFilter === 'true') {
@@ -306,7 +331,7 @@ export function ResiScanScreen() {
     }
 
     return list;
-  }, [courierFilteredTransactions, checkStatusFilter, debouncedSearch]);
+  }, [baseTransactions, checkStatusFilter, debouncedSearch]);
 
   // Handle Mark Checked via API — optimistically updates local cache
   const { apiClient } = useConnection();
@@ -816,11 +841,11 @@ export function ResiScanScreen() {
     },
   });
 
-  // Counts derived from courier-filtered dataset — reflects active courier filter while stable across status tabs
-  const totalCount = courierFilteredTransactions.length;
+  // Counts derived from baseTransactions — reflects active courier & resi filter while stable across status tabs
+  const totalCount = baseTransactions.length;
   const checkedCount = useMemo(
-    () => courierFilteredTransactions.filter((t) => t.sudah_dicek).length,
-    [courierFilteredTransactions]
+    () => baseTransactions.filter((t) => t.sudah_dicek).length,
+    [baseTransactions]
   );
   const uncheckedCount = totalCount - checkedCount;
 
@@ -1124,6 +1149,71 @@ export function ResiScanScreen() {
               <X size={12} color={colors.primary} />
             </TouchableOpacity>
           ) : null}
+        </View>
+
+        {/* Resi Presence Filter Row */}
+        <View className="flex-row items-center gap-1.5 mb-2.5">
+          <TouchableOpacity
+            onPress={() => setResiFilter('all')}
+            activeOpacity={0.7}
+            className={cn(
+              'flex-1 py-1.5 px-2 rounded-lg border items-center justify-center',
+              resiFilter === 'all'
+                ? 'bg-primary/15 border-primary'
+                : 'bg-secondary/40 border-border'
+            )}
+          >
+            <Text
+              className={cn(
+                'text-xs font-semibold',
+                resiFilter === 'all' ? 'text-primary font-bold' : 'text-muted-foreground'
+              )}
+            >
+              Semua ({resiCounts.all})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setResiFilter('has_resi')}
+            activeOpacity={0.7}
+            className={cn(
+              'flex-1 py-1.5 px-2 rounded-lg border items-center justify-center flex-row gap-1',
+              resiFilter === 'has_resi'
+                ? 'bg-emerald-500/15 border-emerald-500'
+                : 'bg-secondary/40 border-border'
+            )}
+          >
+            <ScanBarcode size={13} color={resiFilter === 'has_resi' ? '#10b981' : colors.mutedForeground} />
+            <Text
+              className={cn(
+                'text-xs font-semibold',
+                resiFilter === 'has_resi' ? 'text-emerald-500 font-bold' : 'text-muted-foreground'
+              )}
+            >
+              Ada Resi ({resiCounts.hasResi})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setResiFilter('no_resi')}
+            activeOpacity={0.7}
+            className={cn(
+              'flex-1 py-1.5 px-2 rounded-lg border items-center justify-center flex-row gap-1',
+              resiFilter === 'no_resi'
+                ? 'bg-rose-500/15 border-rose-500'
+                : 'bg-secondary/40 border-border'
+            )}
+          >
+            <AlertCircle size={13} color={resiFilter === 'no_resi' ? '#f43f5e' : colors.mutedForeground} />
+            <Text
+              className={cn(
+                'text-xs font-semibold',
+                resiFilter === 'no_resi' ? 'text-rose-500 font-bold' : 'text-muted-foreground'
+              )}
+            >
+              Tanpa Resi ({resiCounts.noResi})
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Search Input */}
