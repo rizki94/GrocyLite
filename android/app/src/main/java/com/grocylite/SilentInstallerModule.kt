@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -29,6 +30,17 @@ class SilentInstallerModule(reactContext: ReactApplicationContext) : ReactContex
             val apkFile = File(apkPath)
             if (!apkFile.exists()) {
                 promise.reject("FILE_NOT_FOUND", "APK file not found at $apkPath")
+                return
+            }
+
+            // On Android 8.0+, verify unknown app installation permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+                val manageIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(manageIntent)
+                promise.reject("PERMISSION_REQUIRED", "Harap berikan izin instalasi aplikasi tidak dikenal untuk GrocyLite.")
                 return
             }
 
@@ -58,11 +70,18 @@ class SilentInstallerModule(reactContext: ReactApplicationContext) : ReactContex
                 action = "com.grocylite.INSTALL_COMPLETE"
             }
             
+            // FLAG_MUTABLE is strictly required on Android 12+ so PackageInstaller can fill in EXTRA_STATUS & EXTRA_INTENT
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
                 sessionId,
                 intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                flags
             )
 
             session.commit(pendingIntent.intentSender)
@@ -81,6 +100,16 @@ class SilentInstallerModule(reactContext: ReactApplicationContext) : ReactContex
             val apkFile = File(apkPath)
             if (!apkFile.exists()) {
                 promise.reject("FILE_NOT_FOUND", "APK file not found at $apkPath")
+                return
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+                val manageIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(manageIntent)
+                promise.reject("PERMISSION_REQUIRED", "Harap berikan izin instalasi aplikasi tidak dikenal untuk GrocyLite.")
                 return
             }
 
@@ -106,6 +135,30 @@ class SilentInstallerModule(reactContext: ReactApplicationContext) : ReactContex
 
 class SilentInstallerReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
-        // App normally restarts on successful self-update
+        if (context == null || intent == null) return
+
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        when (status) {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                // When OS requires user consent, launch confirmation activity
+                val confirmIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_INTENT)
+                }
+                confirmIntent?.let {
+                    it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(it)
+                }
+            }
+            PackageInstaller.STATUS_SUCCESS -> {
+                // App will be updated and restarted
+            }
+            else -> {
+                val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                android.util.Log.w("SilentInstaller", "PackageInstaller failed status=$status msg=$msg")
+            }
+        }
     }
 }

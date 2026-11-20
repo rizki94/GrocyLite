@@ -21,6 +21,7 @@ import {
 import useAuth from './src/hooks/use-auth';
 import useConnection from './src/hooks/use-connection';
 import { useAutoUpdate } from './src/hooks/use-auto-update';
+import { UpdateModal } from './src/components/update-modal';
 
 import { LoginScreen } from './src/screens/auth/login-screen';
 import { SplashScreen } from './src/screens/splash-screen';
@@ -194,6 +195,7 @@ export default function App() {
               </UserContext.Provider>
             </AuthContext.Provider>
           </ConnectionContext.Provider>
+          <UpdateModal />
           <StatusBar
             barStyle={isDark ? 'light-content' : 'dark-content'}
             backgroundColor="transparent"
