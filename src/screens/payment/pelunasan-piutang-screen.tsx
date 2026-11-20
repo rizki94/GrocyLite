@@ -8,6 +8,7 @@ import {
   Modal,
   Alert,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -31,6 +32,9 @@ import {
   AlertCircle,
   FileText,
   ChevronDown,
+  StickyNote,
+  Layers,
+  Rows3,
 } from 'lucide-react-native';
 import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
@@ -76,8 +80,13 @@ export function PelunasanPiutangScreen() {
   const [accBank, setAccBank] = useState('');
   const [bankAccAct, setBankAccAct] = useState('');
   const [description, setDescription] = useState('KEBUTUHAN DAPUR __ SD __');
+  const [contactDescriptions, setContactDescriptions] = useState<Record<number, string>>({});
   const [paymentAmounts, setPaymentAmounts] = useState<Record<string, number>>({});
+  const [splitNotes, setSplitNotes] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Which invoice's keterangan input is currently active in modal
+  const [activeKetInvoice, setActiveKetInvoice] = useState<string | null>(null);
 
   // Selector Picker Modals
   const [bankPickerOpen, setBankPickerOpen] = useState(false);
@@ -199,6 +208,29 @@ export function PelunasanPiutangScreen() {
     }, 0);
   }, [selectedInvoices, paymentAmounts]);
 
+  // Group selected invoices by customer contact
+  const contactGroups = useMemo(() => {
+    const map = new Map<number, { contactId: number; contactName: string; invoices: UnpaidInvoice[]; totalOutstanding: number }>();
+    for (const inv of selectedInvoices) {
+      const cId = inv.Contact;
+      const cName = inv.CustomerName || `Pelanggan #${cId}`;
+      const isRetur =
+        inv.GrpCode === 'SR' ||
+        inv.CodeTr?.endsWith('BSR') ||
+        Number(inv.Outstanding) < 0;
+      const rawAmount = paymentAmounts[inv.NoTr] ?? Number(inv.Outstanding);
+      const amount = isRetur ? -Math.abs(Number(rawAmount) || 0) : Math.abs(Number(rawAmount) || 0);
+      const existing = map.get(cId);
+      if (existing) {
+        existing.invoices.push(inv);
+        existing.totalOutstanding += amount;
+      } else {
+        map.set(cId, { contactId: cId, contactName: cName, invoices: [inv], totalOutstanding: amount });
+      }
+    }
+    return Array.from(map.values());
+  }, [selectedInvoices, paymentAmounts]);
+
   // Open Payment Modal
   const openPaymentModal = () => {
     if (selectedInvoices.length === 0) {
@@ -217,6 +249,17 @@ export function PelunasanPiutangScreen() {
     });
     setPaymentAmounts(initialAmounts);
     setPaymentDate(new Date());
+    setSplitNotes(false);
+    setActiveKetInvoice(null);
+
+    // AR default: fixed description per contact
+    const defaultDesc = 'KEBUTUHAN DAPUR __ SD __';
+    setDescription(defaultDesc);
+    const initialContactDescs: Record<number, string> = {};
+    Array.from(new Set(selectedInvoices.map(i => i.Contact))).forEach(cId => {
+      initialContactDescs[cId] = defaultDesc;
+    });
+    setContactDescriptions(initialContactDescs);
     setPaymentModalOpen(true);
   };
 
@@ -225,6 +268,21 @@ export function PelunasanPiutangScreen() {
     if (!accBank || !bankAccAct) {
       Alert.alert('Perhatian', 'Silakan pilih Bank dan Perkiraan Kas/Bank terlebih dahulu.');
       return;
+    }
+
+    // Validate keterangan
+    if (contactGroups.length > 1) {
+      for (const grp of contactGroups) {
+        if (!(contactDescriptions[grp.contactId] || '').trim()) {
+          Alert.alert('Perhatian', `Mohon isi keterangan untuk pelanggan: ${grp.contactName}`);
+          return;
+        }
+      }
+    } else {
+      if (!description.trim()) {
+        Alert.alert('Perhatian', 'Keterangan header tidak boleh kosong.');
+        return;
+      }
     }
 
     if (totalSelectedNet <= 0) {
@@ -240,7 +298,8 @@ export function PelunasanPiutangScreen() {
         acc_bank: accBank,
         bank_acc_act: bankAccAct,
         description: description.trim() || 'KEBUTUHAN DAPUR __ SD __',
-        split_notes: false,
+        contact_descriptions: contactDescriptions,
+        split_notes: splitNotes,
         invoices: selectedInvoices.map(inv => {
           const isRetur =
             inv.GrpCode === 'SR' ||
@@ -556,7 +615,7 @@ export function PelunasanPiutangScreen() {
       >
         <View className="flex-1 bg-black/60 justify-end">
           <View
-            className="bg-card w-full rounded-t-3xl border-t border-border p-5 shadow-2xl max-h-[85%]"
+            className="bg-card w-full rounded-t-3xl border-t border-border p-5 shadow-2xl max-h-[92%]"
             style={{ paddingBottom: Math.max(insets.bottom, 16) }}
           >
             <View className="flex-row items-center justify-between mb-4 pb-3 border-b border-border/40">
@@ -569,7 +628,7 @@ export function PelunasanPiutangScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* Payment Date */}
               <View className="mb-3">
                 <Text className="text-xs font-bold text-foreground mb-1">
@@ -618,18 +677,148 @@ export function PelunasanPiutangScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Keterangan */}
-              <View className="mb-4">
-                <Text className="text-xs font-bold text-foreground mb-1">Keterangan Header</Text>
-                <Input
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Keterangan pelunasan..."
-                  className="h-10 text-xs font-medium bg-secondary/15"
-                />
-              </View>
+              {/* Keterangan Header — single customer */}
+              {contactGroups.length <= 1 && (
+                <View className="mb-3">
+                  <Text className="text-xs font-bold text-foreground mb-1">
+                    Keterangan Header <Text className="text-destructive">*</Text>
+                  </Text>
+                  <Input
+                    value={description}
+                    onChangeText={val => {
+                      setDescription(val);
+                      if (contactGroups[0]) {
+                        setContactDescriptions(p => ({ ...p, [contactGroups[0].contactId]: val }));
+                      }
+                    }}
+                    placeholder="Keterangan pelunasan piutang..."
+                    className="h-10 text-xs font-medium bg-secondary/15"
+                  />
+                </View>
+              )}
 
-              {/* Invoices Breakdown Table */}
+              {/* Keterangan per Customer — multi customer */}
+              {contactGroups.length > 1 && (
+                <View className="mb-3">
+                  <View className="p-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 mb-2">
+                    <View className="flex-row items-center gap-1.5">
+                      <AlertCircle size={14} color="#d97706" />
+                      <Text className="text-xs font-bold text-amber-800 dark:text-amber-200">
+                        Multi-Pelanggan ({contactGroups.length} Pelanggan)
+                      </Text>
+                    </View>
+                    <Text className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 leading-4">
+                      Setiap pelanggan akan dibuatkan Header Pelunasan terpisah. Ketuk baris faktur di bawah untuk mengisi keterangannya.
+                    </Text>
+                  </View>
+                  <Text className="text-xs font-bold text-foreground mb-1.5">
+                    Keterangan per Header Pelanggan <Text className="text-destructive">*</Text>
+                  </Text>
+                  {contactGroups.map(grp => {
+                    const isActive = activeKetInvoice === `grp:${grp.contactId}`;
+                    const hasValue = !!(contactDescriptions[grp.contactId] || '').trim();
+                    return (
+                      <View key={grp.contactId} className="mb-2">
+                        <TouchableOpacity
+                          onPress={() =>
+                            setActiveKetInvoice(isActive ? null : `grp:${grp.contactId}`)
+                          }
+                          className={cn(
+                            'p-2.5 rounded-xl border flex-row items-center justify-between',
+                            isActive
+                              ? 'border-primary bg-primary/10'
+                              : hasValue
+                                ? 'border-border/60 bg-secondary/10'
+                                : 'border-amber-400/60 bg-amber-50/20 dark:bg-amber-950/10',
+                          )}
+                        >
+                          <View className="flex-1">
+                            <Text className="text-xs font-bold text-foreground" numberOfLines={1}>
+                              {grp.contactName}
+                            </Text>
+                            <Text className="text-[10px] text-muted-foreground">
+                              {grp.invoices.length} faktur · Rp {numberWithComma(Math.abs(grp.totalOutstanding))}
+                            </Text>
+                          </View>
+                          <View className="flex-row items-center gap-1.5">
+                            {hasValue && !isActive && (
+                              <Text className="text-[9px] text-primary font-bold">✓</Text>
+                            )}
+                            <StickyNote size={14} color={isActive ? colors.primary : colors.mutedForeground} />
+                          </View>
+                        </TouchableOpacity>
+                        {isActive && (
+                          <TextInput
+                            value={contactDescriptions[grp.contactId] ?? ''}
+                            onChangeText={val =>
+                              setContactDescriptions(p => ({ ...p, [grp.contactId]: val }))
+                            }
+                            placeholder={`Keterangan header untuk ${grp.contactName}...`}
+                            multiline={false}
+                            autoFocus
+                            style={{
+                              marginTop: 4,
+                              height: 40,
+                              paddingHorizontal: 12,
+                              borderRadius: 10,
+                              borderWidth: 1.5,
+                              borderColor: colors.primary,
+                              backgroundColor: 'transparent',
+                              fontSize: 12,
+                              fontWeight: '500',
+                              color: colors.foreground,
+                            }}
+                          />
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Gabung / Pisah per Faktur toggle */}
+              {selectedInvoices.length > 1 && (
+                <View className="mb-4">
+                  <Text className="text-xs font-bold text-foreground mb-1.5">Format Baris Kas/Bank (CR)</Text>
+                  <View className="flex-row rounded-xl border border-border/50 overflow-hidden bg-muted/40">
+                    <TouchableOpacity
+                      onPress={() => setSplitNotes(false)}
+                      className={cn(
+                        'flex-1 py-2.5 items-center flex-row justify-center gap-1.5',
+                        !splitNotes ? 'bg-card shadow-sm' : 'bg-transparent',
+                      )}
+                    >
+                      <Layers size={13} color={!splitNotes ? colors.primary : colors.mutedForeground} />
+                      <Text className={cn('text-[11px] font-bold', !splitNotes ? 'text-foreground' : 'text-muted-foreground')}>
+                        {contactGroups.length > 1 ? 'Gabung per Pelanggan' : 'Gabung (1 Baris)'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setSplitNotes(true)}
+                      className={cn(
+                        'flex-1 py-2.5 items-center flex-row justify-center gap-1.5',
+                        splitNotes ? 'bg-card shadow-sm' : 'bg-transparent',
+                      )}
+                    >
+                      <Rows3 size={13} color={splitNotes ? colors.primary : colors.mutedForeground} />
+                      <Text className={cn('text-[11px] font-bold', splitNotes ? 'text-foreground' : 'text-muted-foreground')}>
+                        Pisah per Faktur
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text className="text-[10px] text-muted-foreground mt-1 leading-4">
+                    {contactGroups.length > 1
+                      ? !splitNotes
+                        ? 'Faktur pelanggan sama digabung 1 baris kas/bank per header pelanggan.'
+                        : 'Baris kas/bank dibuat terpisah per faktur.'
+                      : !splitNotes
+                        ? 'Total dibukukan sebagai 1 baris kas/bank (default).'
+                        : 'Baris kas/bank dibuat terpisah per faktur dengan nominal masing-masing.'}
+                  </Text>
+                </View>
+              )}
+
+              {/* Invoices Breakdown — tap to show keterangan per invoice */}
               <Text className="text-xs font-bold text-foreground mb-2">
                 Rincian Tagihan & Retur ({selectedInvoices.length}):
               </Text>
@@ -639,51 +828,85 @@ export function PelunasanPiutangScreen() {
                     inv.GrpCode === 'SR' ||
                     inv.CodeTr?.endsWith('BSR') ||
                     Number(inv.Outstanding) < 0;
+                  const isActive = activeKetInvoice === inv.NoTr;
 
                   return (
-                    <View
-                      key={inv.NoTr}
-                      className={cn(
-                        'p-3 flex-row justify-between items-center',
-                        idx > 0 && 'border-t border-border/20',
-                        isRetur ? 'bg-purple-50/25 dark:bg-purple-950/20' : 'bg-card',
-                      )}
-                    >
-                      <View className="flex-1 mr-2">
-                        <View className="flex-row items-center gap-1.5 mb-0.5">
-                          {isRetur && (
-                            <View className="px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-900/40">
-                              <Text className="text-[9px] font-black text-purple-700 dark:text-purple-300">
-                                RETUR
-                              </Text>
-                            </View>
-                          )}
-                          <Text className="font-mono font-bold text-xs text-foreground">
-                            {inv.NoTr}
-                          </Text>
+                    <View key={inv.NoTr} className={cn('border-border/20', idx > 0 && 'border-t')}>
+                      <TouchableOpacity
+                        onPress={() => setActiveKetInvoice(isActive ? null : inv.NoTr)}
+                        className={cn(
+                          'p-3 flex-row justify-between items-center',
+                          isActive
+                            ? 'bg-primary/8 border border-primary/40 rounded-t-none'
+                            : isRetur
+                              ? 'bg-purple-50/25 dark:bg-purple-950/20'
+                              : 'bg-card',
+                        )}
+                      >
+                        <View className="flex-1 mr-2">
+                          <View className="flex-row items-center gap-1.5 mb-0.5">
+                            {isRetur && (
+                              <View className="px-1.5 rounded bg-purple-100 dark:bg-purple-900/40">
+                                <Text className="text-[9px] font-black text-purple-700 dark:text-purple-300">RETUR</Text>
+                              </View>
+                            )}
+                            <Text className="font-mono font-bold text-xs text-foreground">{inv.NoTr}</Text>
+                            {isActive && (
+                              <View className="px-1.5 rounded-md bg-primary/15">
+                                <Text className="text-[9px] font-bold text-primary">Aktif</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text className="text-[10px] text-muted-foreground truncate">{inv.CustomerName}</Text>
                         </View>
-                        <Text className="text-[10px] text-muted-foreground truncate">
-                          {inv.CustomerName}
-                        </Text>
-                      </View>
 
-                      <View className="items-end w-32">
-                        <Input
-                          keyboardType="numeric"
-                          value={paymentAmounts[inv.NoTr]?.toString() ?? ''}
-                          onChangeText={txt => {
-                            const val = parseFloat(txt) || 0;
-                            setPaymentAmounts(prev => ({
-                              ...prev,
-                              [inv.NoTr]: isRetur ? -Math.abs(val) : Math.abs(val),
-                            }));
-                          }}
-                          className={cn(
-                            'h-8 text-xs text-right font-bold tabular-nums',
-                            isRetur && 'text-purple-600 dark:text-purple-400 border-purple-300',
-                          )}
-                        />
-                      </View>
+                        <View className="items-end">
+                          <Input
+                            keyboardType="numeric"
+                            value={paymentAmounts[inv.NoTr]?.toString() ?? ''}
+                            onChangeText={txt => {
+                              const val = parseFloat(txt) || 0;
+                              setPaymentAmounts(prev => ({
+                                ...prev,
+                                [inv.NoTr]: isRetur ? -Math.abs(val) : Math.abs(val),
+                              }));
+                            }}
+                            className={cn(
+                              'h-8 w-32 text-xs text-right font-bold tabular-nums',
+                              isRetur && 'text-purple-600 dark:text-purple-400 border-purple-300',
+                            )}
+                          />
+                        </View>
+                      </TouchableOpacity>
+
+                      {/* Per-invoice keterangan input */}
+                      {isActive && (
+                        <View className="px-3 pb-3 bg-primary/5 border-x border-b border-primary/30 rounded-b-xl">
+                          <Text className="text-[10px] text-muted-foreground font-semibold mb-1 mt-2">
+                            Keterangan Header (Pelanggan: {inv.CustomerName})
+                          </Text>
+                          <TextInput
+                            value={contactDescriptions[inv.Contact] ?? ''}
+                            onChangeText={val =>
+                              setContactDescriptions(p => ({ ...p, [inv.Contact]: val }))
+                            }
+                            placeholder={`Keterangan untuk ${inv.CustomerName}...`}
+                            autoFocus
+                            multiline={false}
+                            style={{
+                              height: 40,
+                              paddingHorizontal: 12,
+                              borderRadius: 10,
+                              borderWidth: 1.5,
+                              borderColor: colors.primary,
+                              backgroundColor: 'transparent',
+                              fontSize: 12,
+                              fontWeight: '500',
+                              color: colors.foreground,
+                            }}
+                          />
+                        </View>
+                      )}
                     </View>
                   );
                 })}
