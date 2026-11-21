@@ -818,9 +818,33 @@ export function ApproveDetailScreen({ navigation, route }: any) {
 
                                         {/* Qty Column */}
                                         <View className="flex-[0.5] items-center">
-                                          <Text className="font-black text-foreground text-[9px] text-center">
+                                          <Text
+                                            className={cn(
+                                              'font-black text-[9px] text-center',
+                                              Number(item.CQty) <= 0
+                                                ? 'text-destructive'
+                                                : 'text-foreground',
+                                            )}
+                                            style={
+                                              Number(item.CQty) <= 0
+                                                ? { color: colors.red }
+                                                : undefined
+                                            }
+                                          >
                                             {numberWithComma(item.CQty)}{' '}
-                                            <Text className="text-[8px] text-center">
+                                            <Text
+                                              className={cn(
+                                                'text-[8px] text-center',
+                                                Number(item.CQty) <= 0
+                                                  ? 'text-destructive'
+                                                  : 'text-foreground',
+                                              )}
+                                              style={
+                                                Number(item.CQty) <= 0
+                                                  ? { color: colors.red }
+                                                  : undefined
+                                              }
+                                            >
                                               {item.Unit}
                                             </Text>
                                           </Text>
@@ -1027,10 +1051,34 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                       ) : null}
                     </View>
                     <View className="flex-[0.7] items-center">
-                      <Text className="text-[9px] font-black text-foreground">
+                      <Text
+                        className={cn(
+                          'text-[9px] font-black',
+                          Number(item.CQty) <= 0
+                            ? 'text-destructive'
+                            : 'text-foreground',
+                        )}
+                        style={
+                          Number(item.CQty) <= 0
+                            ? { color: colors.red }
+                            : undefined
+                        }
+                      >
                         {numberWithComma(item.CQty)}
                       </Text>
-                      <Text className="text-[7px] text-muted-foreground font-black uppercase">
+                      <Text
+                        className={cn(
+                          'text-[7px] font-black uppercase',
+                          Number(item.CQty) <= 0
+                            ? 'text-destructive'
+                            : 'text-muted-foreground',
+                        )}
+                        style={
+                          Number(item.CQty) <= 0
+                            ? { color: colors.red }
+                            : undefined
+                        }
+                      >
                         {item.Unit}
                       </Text>
                     </View>
@@ -1129,7 +1177,19 @@ export function ApproveDetailScreen({ navigation, route }: any) {
                         </View>
                       ) : null}
                     </View>
-                    <Text className="w-10 text-[9px] font-black text-primary text-center">
+                    <Text
+                      className={cn(
+                        'w-10 text-[9px] font-black text-center',
+                        Number(item.qty) <= 0
+                          ? 'text-destructive'
+                          : 'text-primary',
+                      )}
+                      style={
+                        Number(item.qty) <= 0
+                          ? { color: colors.red }
+                          : undefined
+                      }
+                    >
                       {numberWithComma(item.qty)}
                     </Text>
                     <Text className="w-16 text-[9px] font-black text-foreground text-right">
