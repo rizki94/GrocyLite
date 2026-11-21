@@ -5,12 +5,9 @@ import {
   Modal,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
 import { useThemeColor } from '../lib/colors';
-import { cn } from '../lib/utils';
 import {
-  Sparkles,
   ArrowUpCircle,
   Download,
   AlertCircle,
@@ -18,8 +15,15 @@ import {
   X,
   FileText,
   Cpu,
+  FolderDown,
 } from 'lucide-react-native';
-import { useUpdateStore, startUpdateDownload, cancelUpdateDownload, closeUpdateModal } from '../hooks/use-auto-update';
+import {
+  useUpdateStore,
+  startUpdateDownload,
+  cancelUpdateDownload,
+  closeUpdateModal,
+  triggerInstall,
+} from '../hooks/use-auto-update';
 
 export const UpdateModal: React.FC = () => {
   const colors = useThemeColor();
@@ -33,6 +37,7 @@ export const UpdateModal: React.FC = () => {
     downloadProgress,
     downloadedBytes,
     totalBytes,
+    savedPath,
     errorMessage,
   } = useUpdateStore();
 
@@ -44,9 +49,8 @@ export const UpdateModal: React.FC = () => {
   };
 
   const isDownloading = phase === 'downloading';
-  const isInstalling = phase === 'installing';
+  const isDownloaded = phase === 'downloaded';
   const isError = phase === 'error';
-  const isReady = phase === 'ready';
 
   return (
     <Modal
@@ -54,7 +58,7 @@ export const UpdateModal: React.FC = () => {
       transparent
       animationType="fade"
       onRequestClose={() => {
-        if (!isDownloading && !isInstalling) {
+        if (!isDownloading) {
           closeUpdateModal();
         }
       }}
@@ -67,8 +71,8 @@ export const UpdateModal: React.FC = () => {
               <View className="w-11 h-11 rounded-2xl bg-primary/10 items-center justify-center">
                 {isError ? (
                   <AlertCircle size={22} color={colors.destructive} />
-                ) : isInstalling ? (
-                  <CheckCircle2 size={22} color={colors.primary} />
+                ) : isDownloaded ? (
+                  <CheckCircle2 size={22} color={colors.green || '#10b981'} />
                 ) : (
                   <ArrowUpCircle size={22} color={colors.primary} />
                 )}
@@ -77,8 +81,8 @@ export const UpdateModal: React.FC = () => {
                 <Text className="text-base font-black text-foreground">
                   {isError
                     ? 'Gagal Memperbarui'
-                    : isInstalling
-                    ? 'Memasang Aplikasi'
+                    : isDownloaded
+                    ? 'Unduhan Selesai'
                     : isDownloading
                     ? 'Mengunduh Pembaruan'
                     : 'Pembaruan Tersedia'}
@@ -89,7 +93,7 @@ export const UpdateModal: React.FC = () => {
               </View>
             </View>
 
-            {!isDownloading && !isInstalling && (
+            {!isDownloading && (
               <TouchableOpacity
                 onPress={closeUpdateModal}
                 className="p-1.5 rounded-full bg-secondary/30 -mr-1"
@@ -155,15 +159,35 @@ export const UpdateModal: React.FC = () => {
                 </View>
               </View>
             </View>
-          ) : isInstalling ? (
-            <View className="my-5 items-center justify-center space-y-3">
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text className="text-xs font-bold text-foreground text-center">
-                Memverifikasi berkas APK...
-              </Text>
-              <Text className="text-[11px] text-muted-foreground text-center px-2">
-                Jendela konfirmasi instalasi sistem akan terbuka. Silakan pilih "Update" atau "Install".
-              </Text>
+          ) : isDownloaded ? (
+            /* Downloaded & Ready to Install */
+            <View className="my-3 space-y-3">
+              <View className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-2">
+                <View className="flex-row items-center gap-2">
+                  <CheckCircle2 size={16} color={colors.green || '#10b981'} />
+                  <Text className="text-xs font-bold text-foreground">
+                    Berkas APK siap dipasang!
+                  </Text>
+                </View>
+                <Text className="text-[11px] text-muted-foreground leading-4">
+                  Ketuk tombol di bawah untuk membuka jendela penginstal aplikasi Android.
+                </Text>
+
+                {savedPath ? (
+                  <View className="pt-2 border-t border-border/30 flex-row items-center gap-1.5">
+                    <FolderDown size={13} color={colors.mutedForeground} />
+                    <Text className="text-[10px] font-mono text-muted-foreground flex-1" numberOfLines={1}>
+                      {savedPath}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {errorMessage && (
+                <Text className="text-[11px] text-destructive leading-4 px-1">
+                  {errorMessage}
+                </Text>
+              )}
             </View>
           ) : isError ? (
             <View className="my-3 p-3 rounded-2xl bg-destructive/10 border border-destructive/20 space-y-1">
@@ -205,7 +229,25 @@ export const UpdateModal: React.FC = () => {
                   Batalkan Unduhan
                 </Text>
               </TouchableOpacity>
-            ) : isInstalling ? null : isError ? (
+            ) : isDownloaded ? (
+              <>
+                <TouchableOpacity
+                  onPress={closeUpdateModal}
+                  className="flex-1 h-11 rounded-xl bg-secondary/30 border border-border/50 items-center justify-center active:bg-secondary/50"
+                >
+                  <Text className="text-xs font-bold text-foreground">Nanti</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={triggerInstall}
+                  className="flex-[1.5] h-11 rounded-xl bg-emerald-600 items-center justify-center active:opacity-90 flex-row gap-1.5"
+                >
+                  <Download size={14} color="#ffffff" />
+                  <Text className="text-xs font-black text-white">
+                    Pasang Sekarang
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : isError ? (
               <>
                 <TouchableOpacity
                   onPress={closeUpdateModal}

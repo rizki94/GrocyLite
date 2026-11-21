@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Alert, Platform, NativeModules } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import ReactNativeBlobUtil from 'react-native-blob-util';
@@ -23,7 +23,7 @@ export interface GitHubRelease {
   assets: GitHubAsset[];
 }
 
-export type UpdatePhase = 'idle' | 'ready' | 'downloading' | 'installing' | 'error';
+export type UpdatePhase = 'idle' | 'ready' | 'downloading' | 'downloaded' | 'error';
 
 interface UpdateState {
   showModal: boolean;
@@ -37,6 +37,7 @@ interface UpdateState {
   downloadProgress: number; // 0 - 100
   downloadedBytes: number;
   totalBytes: number;
+  savedPath: string | null;
   errorMessage: string | null;
 }
 
@@ -52,6 +53,7 @@ const initialState: UpdateState = {
   downloadProgress: 0,
   downloadedBytes: 0,
   totalBytes: 0,
+  savedPath: null,
   errorMessage: null,
 };
 
@@ -138,7 +140,7 @@ export const useUpdateStore = () => {
  * Close update modal
  */
 export const closeUpdateModal = () => {
-  if (currentState.phase === 'downloading' || currentState.phase === 'installing') {
+  if (currentState.phase === 'downloading') {
     return;
   }
   emitUpdate({ showModal: false });
@@ -171,7 +173,49 @@ export const cancelUpdateDownload = async () => {
 };
 
 /**
- * Start direct download & install flow
+ * Trigger Android Package Installer via FileProvider Intent
+ * (This does NOT kill the app, but opens the official system update confirmation sheet)
+ */
+export const triggerInstall = async () => {
+  const { dirs } = ReactNativeBlobUtil.fs;
+  const finalApkPath = `${dirs.CacheDir}/GrocyLite-update.apk`;
+
+  try {
+    const exists = await ReactNativeBlobUtil.fs.exists(finalApkPath);
+    if (!exists) {
+      emitUpdate({
+        phase: 'error',
+        errorMessage: 'Berkas APK tidak ditemukan di cache. Silakan unduh ulang.',
+      });
+      return;
+    }
+
+    if (SilentInstaller) {
+      await SilentInstaller.manualInstall(finalApkPath);
+    } else {
+      ReactNativeBlobUtil.android.actionViewIntent(
+        finalApkPath,
+        'application/vnd.android.package-archive',
+        'com.grocylite.provider'
+      );
+    }
+  } catch (err: any) {
+    console.error('Trigger install error:', err);
+    if (err?.code === 'PERMISSION_REQUIRED' || err?.message?.includes('izin')) {
+      emitUpdate({
+        errorMessage: 'Harap izinkan "Instal aplikasi tidak dikenal" untuk GrocyLite, lalu ketuk Pasang Sekarang.',
+      });
+      return;
+    }
+    emitUpdate({
+      phase: 'error',
+      errorMessage: err?.message || 'Gagal membuka penginstal aplikasi Android.',
+    });
+  }
+};
+
+/**
+ * Start direct download flow
  */
 export const startUpdateDownload = async () => {
   const asset = currentState.matchedAsset;
@@ -183,6 +227,26 @@ export const startUpdateDownload = async () => {
   const { dirs } = ReactNativeBlobUtil.fs;
   const finalApkPath = `${dirs.CacheDir}/GrocyLite-update.apk`;
   const tempApkPath = `${finalApkPath}.tmp`;
+  const publicFileName = `GrocyLite-v${currentState.latestVersion}.apk`;
+  const publicApkPath = `${dirs.DownloadDir}/${publicFileName}`;
+
+  // Check if finalApk already exists and size matches GitHub
+  try {
+    if (await ReactNativeBlobUtil.fs.exists(finalApkPath)) {
+      const stat = await ReactNativeBlobUtil.fs.stat(finalApkPath);
+      if (asset.size && asset.size > 0 && Number(stat.size) === asset.size) {
+        console.log('APK already completely downloaded. Launching installer directly.');
+        emitUpdate({
+          phase: 'downloaded',
+          downloadProgress: 100,
+          savedPath: `Download/${publicFileName}`,
+          errorMessage: null,
+        });
+        triggerInstall();
+        return;
+      }
+    }
+  } catch {}
 
   emitUpdate({
     phase: 'downloading',
@@ -198,8 +262,7 @@ export const startUpdateDownload = async () => {
       await ReactNativeBlobUtil.fs.unlink(tempApkPath).catch(() => {});
     }
 
-    // 2. Start direct streaming download into CacheDir (Internal App Cache)
-    // Direct stream automatically handles HTTP 302 redirects cleanly
+    // 2. Start direct streaming download into CacheDir
     activeDownloadTask = ReactNativeBlobUtil.config({
       path: tempApkPath,
       fileCache: true,
@@ -242,51 +305,38 @@ export const startUpdateDownload = async () => {
       throw new Error('Berkas APK terlalu kecil dan kemungkinan rusak.');
     }
 
-    // 4. Move temp file to final APK
+    // 4. Move temp file to final APK in CacheDir
     if (await ReactNativeBlobUtil.fs.exists(finalApkPath)) {
       await ReactNativeBlobUtil.fs.unlink(finalApkPath).catch(() => {});
     }
     await ReactNativeBlobUtil.fs.mv(downloadedPath, finalApkPath);
 
-    // 5. Trigger Installation
+    // 5. Also copy to public Download folder so user can easily find it in File Manager
+    let savedLocationDisplay = `Download/${publicFileName}`;
+    try {
+      if (await ReactNativeBlobUtil.fs.exists(publicApkPath)) {
+        await ReactNativeBlobUtil.fs.unlink(publicApkPath).catch(() => {});
+      }
+      await ReactNativeBlobUtil.fs.cp(finalApkPath, publicApkPath);
+      console.log('Successfully copied update APK to public Download folder:', publicApkPath);
+    } catch (cpErr) {
+      console.warn('Could not copy to public Download folder (Scoped Storage):', cpErr);
+      savedLocationDisplay = 'Internal Cache';
+    }
+
+    // 6. Transition to 'downloaded' phase
     emitUpdate({
-      phase: 'installing',
+      phase: 'downloaded',
       downloadProgress: 100,
+      downloadedBytes: downloadedSize,
+      savedPath: savedLocationDisplay,
+      errorMessage: null,
     });
 
-    if (SilentInstaller) {
-      try {
-        console.log('Attempting package installation session...');
-        await SilentInstaller.installPackage(finalApkPath);
-        return;
-      } catch (silentErr: any) {
-        console.warn('Session install failed, attempting manual install:', silentErr);
-        if (silentErr?.code === 'PERMISSION_REQUIRED' || silentErr?.message?.includes('izin')) {
-          emitUpdate({
-            phase: 'error',
-            errorMessage: 'Izin instalasi aplikasi tidak dikenal diperlukan. Silakan izinkan lalu coba kembali.',
-          });
-          return;
-        }
-      }
-
-      // Fallback manual install via FileProvider
-      try {
-        await SilentInstaller.manualInstall(finalApkPath);
-      } catch (manualErr: any) {
-        throw new Error(manualErr?.message || 'Gagal membuka penginstal paket Android.');
-      }
-    } else {
-      // Fallback if native module unavailable
-      ReactNativeBlobUtil.android.actionViewIntent(
-        finalApkPath,
-        'application/vnd.android.package-archive',
-        'com.grocylite.provider'
-      );
-    }
+    // 7. Prompt system package installer immediately
+    triggerInstall();
   } catch (err: any) {
     console.error('Update download error:', err);
-    // Ignore error if canceled intentionally
     if (err?.message?.includes('cancelled') || err?.message?.includes('canceled')) {
       return;
     }
@@ -321,17 +371,29 @@ export const useAutoUpdate = () => {
         const matched = await pickBestAsset(latestRelease.assets || []);
 
         if (matched) {
+          const finalApkPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/GrocyLite-update.apk`;
+          let isAlreadyDownloaded = false;
+          try {
+            if (await ReactNativeBlobUtil.fs.exists(finalApkPath)) {
+              const stat = await ReactNativeBlobUtil.fs.stat(finalApkPath);
+              if (matched.asset.size && Number(stat.size) === matched.asset.size) {
+                isAlreadyDownloaded = true;
+              }
+            }
+          } catch {}
+
           emitUpdate({
             showModal: true,
-            phase: 'ready',
+            phase: isAlreadyDownloaded ? 'downloaded' : 'ready',
             latestVersion,
             currentVersion,
             releaseNotes: latestRelease.body || '',
             matchedAsset: matched.asset,
             abiLabel: matched.abiLabel,
-            downloadProgress: 0,
-            downloadedBytes: 0,
+            downloadProgress: isAlreadyDownloaded ? 100 : 0,
+            downloadedBytes: isAlreadyDownloaded ? matched.asset.size || 0 : 0,
             totalBytes: matched.asset.size || 0,
+            savedPath: isAlreadyDownloaded ? `Download/GrocyLite-v${latestVersion}.apk` : null,
             errorMessage: null,
           });
         } else if (manual) {
